@@ -1,4 +1,5 @@
 # Workspace 文件系统边界
+
 ## 概览
 
 daemon 不让 HTTP 路由或 ACP 侧 agent 直接碰宿主文件系统。所有 read、write、list、glob、stat 都过 `WorkspaceFileSystem` 边界（`packages/cli/src/serve/fs/`）：
@@ -29,7 +30,7 @@ HTTP 文件路由（`GET /file`、`GET /file/bytes`、`POST /file/write`、`POST
 
 | 文件                     | 用途                                                                                                                                                                                                      |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `paths.ts`               | `canonicalizeWorkspace`、`resolveWithinWorkspace`、`hasSuspiciousPathPattern`、branded `ResolvedPath`、`Intent`（`read \| write \| list \| stat \| glob`）                                                |
+| `paths.ts`               | `canonicalizeWorkspace`、`resolveWithinWorkspace`、`hasSuspiciousPathPattern`、branded `ResolvedPath`、`Intent`（`read \| write \| edit \| list \| glob \| stat`）                                        |
 | `policy.ts`              | `MAX_READ_BYTES`、`MAX_WRITE_BYTES`、`BINARY_PROBE_BYTES`、`assertTrustedForIntent`、`detectBinary`、`enforceReadBytesSize`、`enforceReadSize`、`enforceWriteSize`、`shouldIgnore`                        |
 | `audit.ts`               | `FS_ACCESS_EVENT_TYPE`、`FS_DENIED_EVENT_TYPE`、`createAuditPublisher`、audit payload 类型                                                                                                                |
 | `errors.ts`              | `FsError` 类、`isFsError`、`FsErrorKind`（14 种）、`FsErrorStatus`（`400 / 403 / 404 / 409 / 413 / 422 / 500 / 503`）                                                                                     |

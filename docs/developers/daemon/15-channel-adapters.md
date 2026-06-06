@@ -36,7 +36,7 @@ class DaemonChannelBridge extends EventEmitter {
 - debounce 的 prompt 组装器（适配把用户输入拆成多条入站消息的平台）。
 - 每请求的自动批准策略。
 
-发的事件：`permission_request`、`permission_resolved`、`outbound_message`、`stream_error`、`session_died`。渠道适配器把它们接到平台原生 API。
+发的事件：`permissionRequest`、`permissionResolved`、`textChunk`、`thoughtChunk`、`toolCall`、`promptComplete`、`sessionUpdate`、`modelSwitched`、`modelSwitchFailed`、`error`。渠道适配器把它们接到平台原生 API。
 
 ### `ChannelBase`（`packages/channels/base/src/ChannelBase.ts`）
 
@@ -72,11 +72,12 @@ abstract class ChannelBase {
 
 ### 适配器矩阵
 
-| 适配器       | 传输           | 身份                                       | 权限 UX                   | 自动批准                                          |
-| ------------ | -------------- | ------------------------------------------ | ------------------------- | ------------------------------------------------- |
-| **钉钉**     | WebSocket 流   | `senderStaffId`（群里 + `conversationId`） | 通过 DT markdown 内联按钮 | `ChannelConfig.approvalMode = 'auto' \| 'prompt'` |
-| **微信**     | HTTP 长轮询    | `senderWxid`（群里 + `groupWxid`）         | 纯文本提示 + 回复 token   | 同上                                              |
-| **Telegram** | Bot API 长轮询 | `from.id`（群里 + `chat.id`）              | inline keyboard 按钮      | 同上                                              |
+| 适配器       | 传输               | 身份                                       | 权限 UX                   | 自动批准                                          |
+| ------------ | ------------------ | ------------------------------------------ | ------------------------- | ------------------------------------------------- |
+| **钉钉**     | WebSocket 流       | `senderStaffId`（群里 + `conversationId`） | 通过 DT markdown 内联按钮 | `ChannelConfig.approvalMode = 'auto' \| 'prompt'` |
+| **飞书**     | Event Subscription | `open_id`（群里 + `chat_id`）              | 通过 Lark 互动卡片按钮    | 同上                                              |
+| **微信**     | HTTP 长轮询        | `senderWxid`（群里 + `groupWxid`）         | 纯文本提示 + 回复 token   | 同上                                              |
+| **Telegram** | Bot API 长轮询     | `from.id`（群里 + `chat.id`）              | inline keyboard 按钮      | 同上                                              |
 
 ## 流程
 

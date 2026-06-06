@@ -30,8 +30,10 @@
   mode: 'http-bridge',
   features: ServeFeature[],
   workspaceCwd: string,
-  protocol?: { current: 'v1', supported: ['v1'] },
+  protocolVersions?: { current: 'v1', supported: ['v1'] },
   policy?: { permission: PermissionPolicy },
+  modelServices: string[],
+  qwenCodeVersion?: string,
 }
 ```
 

@@ -58,7 +58,11 @@ type PermissionVoteOutcome =
   | { kind: 'unknown_request' };
 
 type PermissionResolution =
-  | { kind: 'option'; optionId: string }
+  | {
+      kind: 'option';
+      optionId: string;
+      metadata?: Readonly<Record<string, unknown>>;
+    }
   | {
       kind: 'cancelled';
       reason: 'timeout' | 'session_closed' | 'agent_cancelled';
@@ -112,7 +116,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    V["vote({requestId, sessionId, clientId?, optionId, receivedAtMs, fromLoopback})"] --> E{"pending entry exists?"}
+    V["vote({requestId, sessionId, clientId?, optionId, receivedAtMs, fromLoopback, metadata?})"] --> E{"pending entry exists?"}
     E -->|no| RD{"in resolved FIFO?"}
     RD -->|yes| AR["return {already_resolved, resolvedOptionId}"]
     RD -->|no| UR["return {unknown_request}"]

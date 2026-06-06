@@ -87,7 +87,7 @@ class DaemonSessionClient {
   respondToPermission(...): Promise<PermissionResponse>;
   setModel(modelServiceId): Promise<SetModelResult>;
   heartbeat(): Promise<HeartbeatResult>;
-  setMetadata(metadata): Promise<SessionMetadataResult>;
+  updateMetadata(metadata): Promise<SessionMetadataResult>;
   close(): Promise<void>;
 }
 ```

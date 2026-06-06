@@ -194,25 +194,24 @@ sequenceDiagram
 
 `BridgeOptions`（`bridgeOptions.ts:88-323`）：
 
-| 键                                            | 默认                                              | 作用                                                           |
-| --------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------- |
-| `boundWorkspace`                              | （必填）                                          | bridge 强制的规范 workspace 路径                               |
-| `sessionScope`                                | `'single'`                                        | `'single'` 所有客户端共享一个 session；`'thread'` 每客户端一个 |
-| `channelFactory`                              | `defaultSpawnChannelFactory`                      | 可插拔 ACP child 工厂                                          |
-| `initializeTimeoutMs`                         | `10_000`                                          | ACP `initialize` 握手超时                                      |
-| `maxSessions`                                 | `20`                                              | `byId.size` 上限；`0`/`Infinity` = 不限；NaN/负值抛错          |
-| `eventRingSize`                               | `DEFAULT_RING_SIZE`                               | 每 session 事件环；软上限 `1_000_000`                          |
-| `permissionResponseTimeoutMs`                 | `5 min`                                           | mediator 每请求 wallclock                                      |
-| `maxPendingPermissionsPerSession`             | `64`                                              | 反压                                                           |
-| `childEnvOverrides`                           | `{}`                                              | 每 handle 给 ACP child 的 env 增量 / scrub                     |
-| `persistApprovalMode`、`persistDisabledTools` | —                                                 | Wave 4 修改路由的 settings 写钩子                              |
-| `contextFilename`                             | 从 `settings.json` 的 `context.fileName`          | 覆盖 `getCurrentGeminiMdFilename`                              |
-| `statusProvider`                              | （无）                                            | daemon-host preflight cells                                    |
-| `fileSystem`                                  | （无）                                            | `BridgeFileSystem` adapter                                     |
-| `permissionPolicy`                            | 从 `settings.json` 的 `policy.permissionStrategy` | 四策略之一                                                     |
-| `permissionConsensusQuorum`                   | 从 `settings.json`                                | consensus 策略的 N                                             |
-| `permissionAudit`                             | `createNoOpPermissionAuditPublisher()`            | 接到 `PermissionAuditRing`                                     |
-| `channelIdleTimeoutMs`                        | `0`                                               | 最后 session 关闭后保活 ACP child 的毫秒数                     |
+| 键                                | 默认                                              | 作用                                                           |
+| --------------------------------- | ------------------------------------------------- | -------------------------------------------------------------- |
+| `boundWorkspace`                  | （必填）                                          | bridge 强制的规范 workspace 路径                               |
+| `sessionScope`                    | `'single'`                                        | `'single'` 所有客户端共享一个 session；`'thread'` 每客户端一个 |
+| `channelFactory`                  | `defaultSpawnChannelFactory`                      | 可插拔 ACP child 工厂                                          |
+| `initializeTimeoutMs`             | `10_000`                                          | ACP `initialize` 握手超时                                      |
+| `maxSessions`                     | `20`                                              | `byId.size` 上限；`0`/`Infinity` = 不限；NaN/负值抛错          |
+| `eventRingSize`                   | `DEFAULT_RING_SIZE`                               | 每 session 事件环；软上限 `1_000_000`                          |
+| `permissionResponseTimeoutMs`     | `5 min`                                           | mediator 每请求 wallclock                                      |
+| `maxPendingPermissionsPerSession` | `64`                                              | 反压                                                           |
+| `childEnvOverrides`               | `{}`                                              | 每 handle 给 ACP child 的 env 增量 / scrub                     |
+| `persistApprovalMode`             | —                                                 | Wave 4 approval mode 修改的 settings 写钩子                    |
+| `statusProvider`                  | （无）                                            | daemon-host preflight cells                                    |
+| `fileSystem`                      | （无）                                            | `BridgeFileSystem` adapter                                     |
+| `permissionPolicy`                | 从 `settings.json` 的 `policy.permissionStrategy` | 四策略之一                                                     |
+| `permissionConsensusQuorum`       | 从 `settings.json`                                | consensus 策略的 N                                             |
+| `permissionAudit`                 | `createNoOpPermissionAuditPublisher()`            | 接到 `PermissionAuditRing`                                     |
+| `channelIdleTimeoutMs`            | `0`                                               | 最后 session 关闭后保活 ACP child 的毫秒数                     |
 
 ## 新增 bridge 方法（daemon_mode_b_main）
 

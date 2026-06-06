@@ -1,4 +1,5 @@
 # VSCode IDE Daemon 适配器
+
 ## 概览
 
 `packages/vscode-ide-companion/src/services/daemonIdeConnection.ts` 是 **VSCode 扩展的 daemon 适配器**。它让 IDE companion 通过 HTTP + SSE 跟在跑的 `qwen serve` daemon 通话，而不是启动一个进程内 `qwen --acp` stdio 子进程（老 `AcpConnectionState` 路径）。它是 VSCode 宿主侧 [`14-cli-tui-adapter.md`](./14-cli-tui-adapter.md) 的同级传输等价物。
@@ -21,18 +22,22 @@ IDE 的 chat webview 通过本适配器消费 daemon 事件；权限请求以 VS
 ```ts
 class DaemonIdeConnection {
   constructor(opts: DaemonIdeConnectionOptions);
-  connect(): Promise<void>;
+  connect(options: DaemonIdeConnectionOptions): Promise<void>;
   disconnect(): Promise<void>;
-  prompt(req): Promise<PromptResult>;
-  cancel(): Promise<void>;
+  sendPrompt(prompt): Promise<PromptResult>;
+  cancelSession(): Promise<void>;
   respondToPermission(req): Promise<void>;
-  setModel(modelServiceId): Promise<void>;
+  setModel(modelId): Promise<DaemonIdeSetModelResult>;
 
-  onSessionUpdate(cb: (update) => void): Disposable;
-  onPermissionRequest(cb: (req) => void): Disposable;
-  onAskUserQuestion(cb: (q) => void): Disposable;
-  onEndTurn(cb: () => void): Disposable;
-  onDisconnected(cb: (reason) => void): Disposable;
+  onSessionUpdate: (data: SessionNotification) => void;
+  onPermissionRequest: (
+    data: RequestPermissionRequest,
+  ) => Promise<PermissionResponse>;
+  onAskUserQuestion: (
+    data: AskUserQuestionRequest,
+  ) => Promise<AskUserQuestionResponse>;
+  onEndTurn: (reason?: string) => void;
+  onDisconnected: (code: number | null, signal: string | null) => void;
 }
 
 interface DaemonIdeConnectionOptions {

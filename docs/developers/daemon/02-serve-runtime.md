@@ -47,6 +47,7 @@
 | `serve/auth/deviceFlow.ts`、`qwenDeviceFlowProvider.ts`      | Device Flow OAuth 路由（见 [`12-auth-security.md`](./12-auth-security.md)）                                                                                                                                                                                                                                                                                                                                                                                          |
 | `serve/daemonLogger.ts`                                      | `DaemonLogger` 结构化文件日志（详见 [`19-observability.md`](./19-observability.md)）                                                                                                                                                                                                                                                                                                                                                                                 |
 | `serve/debugMode.ts`                                         | `isServeDebugMode()` 公用谓词，控制是否在 HTTP 响应体中包含 verbose 错误上下文                                                                                                                                                                                                                                                                                                                                                                                       |
+| `serve/workspace-service/`                                   | `DaemonWorkspaceService` facade（`index.ts` + `types.ts`）。workspace 级状态查询（MCP / skills / providers / env / preflight / tools）和修改（tool toggle / init / MCP restart / MCP add-remove / MCP manage）从路由层委托给此 facade，每个方法接受 `WorkspaceRequestContext`（audit 关联、客户端身份、路由元数据）                                                                                                                                                  |
 | `serve/acpHttp/`                                             | ACP Streamable HTTP transport（RFD #721），挂载在 `/acp`。7 个文件实现 JSON-RPC POST、SSE GET、DELETE teardown，共享 bridge，与 REST surface 并行                                                                                                                                                                                                                                                                                                                    |
 | `serve/demo.ts`                                              | `GET /demo` 的自包含内联 HTML —— 一个浏览器可访问的调试控制台（聊天 UI + 事件日志 + workspace 检视器）。loopback 且不带 `--require-auth` 时注册在 `bearerAuth` **之前**，开发不带 token 就能从浏览器打开；非 loopback 或带 `--require-auth` 时注册在 `bearerAuth` **之后**，未认证探测不能枚举接口。Strict CSP（`default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'`）+ `X-Frame-Options: DENY`。 |
 
@@ -54,7 +55,7 @@
 
 - `serve/eventBus.ts` → `@qwen-code/acp-bridge/eventBus`
 - `serve/status.ts` → `@qwen-code/acp-bridge/status`
-- `serve/httpAcpBridge.ts` → `@qwen-code/acp-bridge`
+- `serve/acpSessionBridge.ts` → `@qwen-code/acp-bridge`
 
 ## 流程
 
@@ -71,7 +72,7 @@
 9. **boot 一次 `settings.json`**：取 `context.fileName`、`policy.permissionStrategy`、`policy.consensusQuorum`；损坏文件 try/catch 走默认值。之后 **`validatePolicyConfig()`**（`runQwenServe.ts:89+`）解析 `policy.*`，未知 strategy（按 `SERVE_CAPABILITY_REGISTRY.permission_mediation.modes` 单一事实源校验）或非正整数 `consensusQuorum` 时抛 `InvalidPolicyConfigError`。`consensusQuorum` 设了但策略非 `consensus` 时打 stderr 警告（默认会被静默忽略，浮出来防 operator 误以为它生效）。settings 读 I/O 失败回退默认；`InvalidPolicyConfigError` 重抛让 boot 显式失败。
 10. **分配 `PermissionAuditRing`**（512 条）。
 11. **建 `fsFactory`**：`runQwenServe` 路径默认 `trusted: true`；`createServeApp` 直接调时默认 `trusted: false` 并发警告一次。
-12. **`createHttpAcpBridge`**，见 [`03-acp-bridge.md`](./03-acp-bridge.md)。
+12. **`createAcpSessionBridge`**，见 [`03-acp-bridge.md`](./03-acp-bridge.md)。
 13. **`createServeApp`** 装配 Express。
 14. **`server.listen(port, hostname)`**，resolve 后取真实 `getPort()` 给 host allowlist。
 15. **注册 SIGINT / SIGTERM handler**，驱动优雅退出。

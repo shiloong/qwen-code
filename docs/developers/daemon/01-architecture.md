@@ -321,7 +321,7 @@ sequenceDiagram
     Op->>RQS: qwen serve --workspace … --token …
     RQS->>RQS: validate flags + canonicalize workspace
     RQS->>RQS: allocate PermissionAuditRing
-    RQS->>BR: createHttpAcpBridge(options)
+    RQS->>BR: createAcpSessionBridge(options)
     RQS->>APP: createServeApp(bridge, …)
     RQS->>APP: listen(host, port)
     RQS->>RQS: arm SIGINT / SIGTERM handlers

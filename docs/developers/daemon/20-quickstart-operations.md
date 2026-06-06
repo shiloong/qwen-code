@@ -220,7 +220,7 @@ serve/runQwenServe.ts:308          runQwenServe(opts, deps)
    │  ├─ 496-530  loadSettings + validatePolicyConfig
    │  ├─ 542-545  PermissionAuditRing + publisher
    │  ├─ 555-561  resolveBridgeFsFactory
-   │  └─ 563-678  createHttpAcpBridge({...})
+   │  └─ 563-678  createAcpSessionBridge({...})
    │
    ▼
 serve/runQwenServe.ts:665          const app = createServeApp(opts, () => actualPort, {...})

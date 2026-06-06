@@ -225,7 +225,7 @@ spawn 拥有者的 HTTP 响应写不出去时（TCP 在握手中途 reset），�
 ## 参考
 
 - `packages/acp-bridge/src/bridge.ts:183-285`（SessionEntry 定义）
-- `packages/acp-bridge/src/bridgeTypes.ts:30-180+`（`HttpAcpBridge`、`BridgeSession`、`BridgeSessionState`）
+- `packages/acp-bridge/src/bridgeTypes.ts:30-180+`（`AcpSessionBridge`、`BridgeSession`、`BridgeSessionState`）
 - `packages/sdk-typescript/src/daemon/types.ts:113+`（`DaemonSession`）
 - `packages/sdk-typescript/src/daemon/DaemonSessionClient.ts:61-385`
 - Wire 参考：[`../qwen-serve-protocol.md`](../qwen-serve-protocol.md)。

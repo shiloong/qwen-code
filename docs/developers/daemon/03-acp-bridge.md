@@ -4,7 +4,7 @@
 
 `packages/acp-bridge/` 包是 daemon HTTP 层与 ACP 子进程之间的缝隙拥有者。它被 `packages/cli/src/serve/`（`qwen serve` daemon）消费；在 #4175 F1 step 3 中被抽取出来，让以后的消费方（`channels/base/AcpBridge.ts`、VSCode IDE companion）可以直接复用 bridge 内核而不必反向依赖 cli 包。
 
-bridge 提供：一个 `HttpAcpBridge` 实例、一条 `AcpChannel` 连到 ACP 子进程、在这条 channel 上多路复用的 session、每个 session 的 `EventBus`、一个 `MultiClientPermissionMediator`、一个 `BridgeFileSystem` adapter，外加 ACP 形状的辅助方法（`spawnOrAttach`、`loadSession`、`resumeSession`、`sendPrompt`、`cancelSession`、`respondToPermission`，以及供 workspace 级状态与 MCP 重启用的 extMethod RPC）。
+bridge 提供：一个 `AcpSessionBridge` 实例、一条 `AcpChannel` 连到 ACP 子进程、在这条 channel 上多路复用的 session、每个 session 的 `EventBus`、一个 `MultiClientPermissionMediator`、一个 `BridgeFileSystem` adapter，外加 ACP 形状的辅助方法（`spawnOrAttach`、`loadSession`、`resumeSession`、`sendPrompt`、`cancelSession`、`respondToPermission`，以及供 workspace 级状态与 MCP 重启用的 extMethod RPC）。
 
 ## 职责
 
@@ -21,13 +21,13 @@ bridge 提供：一个 `HttpAcpBridge` 实例、一条 `AcpChannel` 连到 ACP �
 
 ## 架构
 
-**公开入口**：`createHttpAcpBridge(opts: BridgeOptions): HttpAcpBridge`，文件 `packages/acp-bridge/src/bridge.ts:350+`。
+**公开入口**：`createAcpSessionBridge(opts: BridgeOptions): AcpSessionBridge`，文件 `packages/acp-bridge/src/bridge.ts:350+`。
 
 **关键类型**：
 
 | 类型                            | 文件                           | 作用                                                                             |
 | ------------------------------- | ------------------------------ | -------------------------------------------------------------------------------- |
-| `HttpAcpBridge`                 | `bridgeTypes.ts:30-180+`       | 对外接口，全部方法都在这里                                                       |
+| `AcpSessionBridge`              | `bridgeTypes.ts:30-180+`       | 对外接口，全部方法都在这里                                                       |
 | `BridgeSession`                 | `bridgeTypes.ts:49+`           | `{ sessionId, workspaceCwd, attached, clientId?, createdAt? }`                   |
 | `BridgeOptions`                 | `bridgeOptions.ts:88-323`      | 构造时配置（见 [配置](#配置)）                                                   |
 | `AcpChannel`                    | `channel.ts:21-50`             | `{ stream, kill(), killSync(), exited }` 一条 ACP NDJSON channel                 |
@@ -36,7 +36,7 @@ bridge 提供：一个 `HttpAcpBridge` 实例、一条 `AcpChannel` 连到 ACP �
 | `EventBus`                      | `eventBus.ts`                  | 每 session 内存 pub/sub，见 [`10-event-bus.md`](./10-event-bus.md)               |
 | `MultiClientPermissionMediator` | `permissionMediator.ts:1-1292` | 四策略 mediator，见 [`04-permission-mediation.md`](./04-permission-mediation.md) |
 
-**内部状态**（由 `createHttpAcpBridge` 闭包持有）：
+**内部状态**（由 `createAcpSessionBridge` 闭包持有）：
 
 | 状态            | 形态                            | 用途                                                                                                                                                                                                                                                                                                                               |
 | --------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -61,7 +61,7 @@ bridge 提供：一个 `HttpAcpBridge` 实例、一条 `AcpChannel` 连到 ACP �
 sequenceDiagram
     autonumber
     participant R as Route handler
-    participant B as createHttpAcpBridge closure
+    participant B as createAcpSessionBridge closure
     participant CF as ChannelFactory
     participant CH as AcpChannel
     participant ACP as ACP child
@@ -216,7 +216,7 @@ sequenceDiagram
 
 ## 新增 bridge 方法（daemon_mode_b_main）
 
-基础的 `spawnOrAttach`、`sendPrompt`、`cancelSession`、`respondToPermission`、`loadSession`、`resumeSession` 之外，`HttpAcpBridge` 接口现在还包含以下方法：
+基础的 `spawnOrAttach`、`sendPrompt`、`cancelSession`、`respondToPermission`、`loadSession`、`resumeSession` 之外，`AcpSessionBridge` 接口现在还包含以下方法：
 
 | 方法                                                         | 作用                                   |
 | ------------------------------------------------------------ | -------------------------------------- |
@@ -240,16 +240,20 @@ sequenceDiagram
 
 此外，`BridgeSpawnRequest.sessionScope` 的 `'per-client'` 已更名为 `'thread'`。`BridgeRestoredSession` 新增 `compactedReplay`、`liveJournal`、`lastEventId` 字段。`BridgeClientRequestContext` 是贯穿 bridge 方法调用的请求上下文类型，携带 `clientId`、`fromLoopback`、`promptId`。
 
+### `DaemonWorkspaceService` facade
+
+workspace 级的状态查询和修改方法已从路由层直接调 bridge 改为委托给 `DaemonWorkspaceService`（`packages/cli/src/serve/workspace-service/`）。这个 facade 为每个方法注入 `WorkspaceRequestContext`（audit 关联、客户端身份、路由元数据），路由代码从 `bridge.getWorkspaceMcpStatus()` 变为 `workspace.getWorkspaceMcpStatus(ctx)`。bridge 接口本身不变，facade 是 server 层的委托封装。
+
 ## 注意 & 已知局限
 
 - `MCP_RESTART_TIMEOUT_MS = 300_000`（5 min）—— bridge race deadline 故意设这么长，因为 `McpClientManager.MAX_DISCOVERY_TIMEOUT_MS` 对 stdio MCP 最长 5 min。设短了会在 ACP child 还在后台重连时假超时。
 - `BridgeOptions.eventRingSize > 1_000_000` 构造时抛错。
 - `connection.unstable_resumeSession` 通过 `unstable_session_resume` 能力 tag 暴露并保留 `unstable_` 前缀；ACP 方法形状还可能变，客户端必须 feature-detect。
-- bridge 包是 `@qwen-code/acp-bridge`，通过 `serve/eventBus.ts`、`serve/status.ts`、`serve/httpAcpBridge.ts` 三个 re-export shim 兼容 F1 前的 import 路径。新代码应该直接 import 包。
+- bridge 包是 `@qwen-code/acp-bridge`，通过 `serve/eventBus.ts`、`serve/status.ts`、`serve/acpSessionBridge.ts` 三个 re-export shim 兼容 F1 前的 import 路径。新代码应该直接 import 包。
 
 ## 参考
 
-- `packages/acp-bridge/src/bridge.ts`（重点 `createHttpAcpBridge` line 350+）
+- `packages/acp-bridge/src/bridge.ts`（重点 `createAcpSessionBridge` line 350+）
 - `packages/acp-bridge/src/bridgeClient.ts`
 - `packages/acp-bridge/src/bridgeTypes.ts:30-180+`
 - `packages/acp-bridge/src/bridgeOptions.ts:88-323`

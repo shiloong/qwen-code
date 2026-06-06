@@ -10,6 +10,7 @@
 | ------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `QWEN_SERVE_DEBUG` stderr 日志              | `bridge.ts:287-295` 及调用点                    | env 设 `1` / `true` / `on` / `yes`（不区分大小写），stderr 出现 `qwen serve debug: ...` 行                                                                                                                                                           |
 | OpenTelemetry span instrumentation          | `server.ts` `daemonTelemetryMiddleware`         | 每个 HTTP 请求包在 `withDaemonRequestSpan` 中；属性含 route、sessionId、clientId、status code。权限路由有独立 span。prompt lifecycle 全程 tracing。配置见 `settings.json` 的 `telemetry` 段                                                          |
+| OTel metrics（11 instruments）              | `core/src/telemetry/daemon-metrics.ts`          | 5 counter + 3 histogram + 3 gauge。覆盖 HTTP 请求量/时延、session/channel 生命周期、prompt 排队/时延、bridge 错误、活跃 session/SSE/heap。详见下文 [OTel Metrics](#otel-metrics11-个-instrument)                                                     |
 | `DaemonLogger` 结构化文件日志               | `serve/daemonLogger.ts`                         | 结构化 JSON-like 日志行写入文件（启动时打印路径 `daemon log -> <path>`）；支持 `info`/`warn`/`error` 级别，上下文含 `route`、`sessionId`、`clientId`、`childPid`、`channelId` 等结构化字段                                                           |
 | per-request access-log middleware           | `server.ts`（`bearerAuth` 之前注册）            | 每请求完成时记录 `method`、`path`、`status`、`durationMs`、`sessionId`、`clientId`（跳过 `GET /health` 和 heartbeat）。4xx+ 用 `warn` 级，成功用 `info` 级                                                                                           |
 | `/health`                                   | `server.ts` 路由                                | Liveness 探针；`?deep=1` 返回扩展信息                                                                                                                                                                                                                |
@@ -23,9 +24,34 @@
 | `PermissionAuditRing`                       | `permissionAudit.ts:1-60`                       | 内存 FIFO（512 条）权限决策                                                                                                                                                                                                                          |
 | mediator 的 `decisionReason` 审计           | `permissionMediator.ts:80-100+`                 | 内部结构化「为什么这样裁决」记录                                                                                                                                                                                                                     |
 
+## OTel Metrics（11 个 instrument）
+
+`packages/core/src/telemetry/daemon-metrics.ts` 定义了 11 个 OTel metric instrument，通过 `initializeDaemonMetrics()` 初始化：
+
+**Counters（5）**：
+
+- `qwen_code.daemon.http.request.count` — 按 route + status class 分维
+- `qwen_code.daemon.session.lifecycle` — spawn / close / die
+- `qwen_code.daemon.channel.lifecycle` — spawn / exit（含 `expected` 属性）
+- `qwen_code.daemon.bridge.error.count` — 按 normalized error type 分维（19 种已知类型 + `unknown`）
+- `qwen_code.daemon.cancel.count` — cancel 请求计数
+
+**Histograms（3）**：
+
+- `qwen_code.daemon.http.request.duration` — ms，有显式 bucket 边界
+- `qwen_code.daemon.prompt.queue_wait` — ms，prompt FIFO 队列等待
+- `qwen_code.daemon.prompt.duration` — ms，端到端 prompt 耗时
+
+**ObservableGauges（3）**：
+
+- `qwen_code.daemon.session.active` — 当前 session 数
+- `qwen_code.daemon.sse.active` — 当前 SSE 连接数
+- `qwen_code.daemon.process.heap_used` — 堆内存（bytes）
+
+Resource 上带 `service.instance.id` 用于进程重启检测。shutdown 时 `forceFlushMetrics`（2s 超时）确保最后一批指标写出。
+
 ## 当下**没有**什么
 
-- **没有 Prometheus / metrics 端点**。没有 `process_cpu_seconds_total`、`http_requests_total`、`event_bus_queue_depth` 等。
 - **`PermissionAuditRing` 无外部 audit sink 接线** —— 环存在，但向 SIEM / 外部存储扇出的钩子还没。
 
 ## 调试套路

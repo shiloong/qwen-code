@@ -73,21 +73,28 @@ bridge / mediator 抛的 typed class，多数路由 handler 通过 switch 给出
 | `UpstreamDeviceFlowError`    | 上游 IdP 在 device-flow 轮询时返了结构化错误      | `oauthError` 字段在插值进 stderr / audit hint 之前过 `sanitizeForStderr` 净化（CVE-2021-42574 / Trojan-Source 防御，见 [`12-auth-security.md`](./12-auth-security.md)）                                                                                                                                                                                                                |
 | `DeviceFlowPollTimeoutError` | registry 的 race 定时器在 provider 返回前就触发了 | **provider 代码不能抛此类型**。导出该类只是因为测试需要，但 registry 用运行时品牌 `_isRegistryTimeout: boolean`（**不是** `instanceof`）来闸 `pollTimedOut`。provider 自己 import + 抛 `new DeviceFlowPollTimeoutError(ms)` 仍走 generic provider-throw 审计路径（因为 `_isRegistryTimeout` 默认 `false`），品牌只在内部工厂 `makeRegistryPollTimeoutError(ms)`（race 定时器调用点）设 |
 
-## Daemon-host 错误 kind（`packages/cli/src/serve/status.ts`）
+## Daemon-host 错误 kind（`packages/acp-bridge/src/status.ts`）
 
-`DaemonErrorKind` 枚举，给 `GET /workspace/preflight` 单元在 daemon-host check 失败时用：
+`ServeErrorKind` 联合（14 种），给 `GET /workspace/preflight` 单元和 MCP 管理路由在失败时用：
 
-| Kind             | 含义                                |
-| ---------------- | ----------------------------------- |
-| `missing_binary` | `ripgrep` / `git` / `npm` 不在 PATH |
-| `blocked_egress` | 出站网络探测失败                    |
-| `auth_env_error` | auth 相关 env 错                    |
-| `init_timeout`   | daemon 侧 init 步骤超 wallclock     |
-| `protocol_error` | ACP / HTTP 协议不匹配               |
-| `missing_file`   | 需要的本地文件缺失                  |
-| `parse_error`    | 本地文件解析错                      |
+| Kind                       | 含义                                                  |
+| -------------------------- | ----------------------------------------------------- |
+| `missing_binary`           | `ripgrep` / `git` / `npm` 不在 PATH                   |
+| `blocked_egress`           | 出站网络探测失败                                      |
+| `auth_env_error`           | auth 相关 env 错                                      |
+| `init_timeout`             | daemon 侧 init 步骤超 wallclock                       |
+| `protocol_error`           | ACP / HTTP 协议不匹配                                 |
+| `missing_file`             | 需要的本地文件缺失                                    |
+| `parse_error`              | 本地文件解析错                                        |
+| `stat_failed`              | workspace / 文件 stat 失败                            |
+| `budget_exhausted`         | `--mcp-budget-mode=enforce` 下 MCP 预算耗尽           |
+| `mcp_budget_would_exceed`  | runtime MCP mutation 会超预算                         |
+| `mcp_server_spawn_failed`  | MCP server 启动失败                                   |
+| `invalid_config`           | 配置无效                                              |
+| `prompt_deadline_exceeded` | prompt 超过 `--prompt-deadline-ms` wallclock          |
+| `writer_idle_timeout`      | SSE writer 超过 `--writer-idle-timeout-ms` 无事件发送 |
 
-通过 preflight cell 的 `errorKind` 暴露，让客户端 UI 渲染结构化修复（而不是裸 stack trace）。
+SDK 侧对应类型为 `DaemonErrorKind`（`packages/sdk-typescript/src/daemon/types.ts`）。通过 preflight cell 的 `errorKind` 暴露，让客户端 UI 渲染结构化修复（而不是裸 stack trace）。
 
 ## Auth 错误形状
 

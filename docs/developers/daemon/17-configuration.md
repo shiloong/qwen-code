@@ -14,8 +14,9 @@
 | `--require-auth`                | flag                   | off                            | bearer 扩展到 loopback + `/health`，无 token 拒启动                                                                                              |
 | `--workspace <dir>`             | 绝对路径               | `process.cwd()`                | 绑定 workspace。必须绝对且为目录；boot 时 canonicalize 一次                                                                                      |
 | `--max-sessions <n>`            | int                    | `20`（`DEFAULT_MAX_SESSIONS`） | 活动 session 上限。`0` / `Infinity` = 不限；`NaN`/负值抛错                                                                                       |
-| `--max-connections <n>`         | int                    | （server 默认）                | HTTP 监听器的 `server.maxConnections`                                                                                                            |
+| `--max-connections <n>`         | int                    | `256`                          | HTTP 监听器的 `server.maxConnections`                                                                                                            |
 | `--event-ring-size <n>`         | int                    | `8000`（`DEFAULT_RING_SIZE`）  | per-session SSE 重放环；软上限 `1_000_000`                                                                                                       |
+| `--http-bridge`                 | flag                   | `true`                         | Stage 1 桥模式。`--no-http-bridge` 回退并打 stderr                                                                                               |
 | `--mcp-client-budget <n>`       | 正整数                 | （未设）                       | 设 `WorkspaceMcpBudget.clientBudget`，通过 `childEnvOverrides` 传 ACP child                                                                      |
 | `--mcp-budget-mode <m>`         | `off`/`warn`/`enforce` | （未设）                       | 设 `WorkspaceMcpBudget.mode`；`enforce` 需 `--mcp-client-budget`                                                                                 |
 | `--allow-origin <pattern>`      | string（可多次）       | （未设）                       | 跨域允许列表，替代默认的 CORS 拒绝策略。`*` 允许任何来源但需 `--token`。boot 拒绝 `--allow-origin '*'` 无 token                                  |
@@ -93,7 +94,6 @@ daemon boot 时读一次（`runQwenServe.ts:496+`）：`loadSettings(boundWorksp
 | `permissionPolicy`、`permissionConsensusQuorum`、`permissionAudit`                                                      | mediator 接线                                                                                 |
 | `statusProvider`                                                                                                        | daemon-host preflight cells                                                                   |
 | `childEnvOverrides`                                                                                                     | per-handle env 增量 / scrub                                                                   |
-| `contextFilename`                                                                                                       | 覆盖 `getCurrentGeminiMdFilename()`                                                           |
 | `channelIdleTimeoutMs`                                                                                                  | 最后 session 关闭后保活 ACP child 的时长（ms），默认 `0`                                      |
 
 ## 重要默认

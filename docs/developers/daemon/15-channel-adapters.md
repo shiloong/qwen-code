@@ -1,13 +1,14 @@
 # Channel 适配器
+
 ## 概览
 
-`packages/channels/` 是 **IM 渠道适配器**，把聊天平台的入站消息翻成 daemon prompt，把 daemon 的出站事件翻回平台消息。现已落地三个具体渠道：钉钉、微信（Weixin）、Telegram。它们共享 `packages/channels/base/` 基座加 `DaemonChannelBridge` —— 后者做 session 多路复用 + SSE 消费。
+`packages/channels/` 是 **IM 渠道适配器**，把聊天平台的入站消息翻成 daemon prompt，把 daemon 的出站事件翻回平台消息。现已落地四个具体渠道：钉钉、飞书（Feishu/Lark）、微信（Weixin）、Telegram。它们共享 `packages/channels/base/` 基座加 `DaemonChannelBridge` —— 后者做 session 多路复用 + SSE 消费。
 
 每个渠道按可配的 `SessionScope`（`per-sender` / `per-group` 等）把一段会话（或一群）映射到一个 daemon session。适配器委托给 `DaemonChannelBridge`，bridge 委托给 SDK 的 `DaemonSessionClient`（见 [`13-sdk-daemon-client.md`](./13-sdk-daemon-client.md)）。
 
 ## 职责
 
-- 从渠道原生传输（钉钉 WebSocket 流、微信 HTTP 长轮询、Telegram Bot 长轮询）收入站消息。
+- 从渠道原生传输（钉钉 WebSocket 流、飞书 Event Subscription、微信 HTTP 长轮询、Telegram Bot 长轮询）收入站消息。
 - 通过 `DaemonChannelSessionFactory` 把 `(senderId, groupId?)` 解析成 daemon session。
 - 把用户消息转成 daemon prompt 并把响应流式回写为出站消息，必要时切块。
 - 渠道原生交互式 prompt 渲染权限请求；非交互时按 `ChannelConfig.approvalMode` 自动批准。
@@ -54,11 +55,12 @@ abstract class ChannelBase {
 
 ### 各渠道适配器
 
-| 适配器         | 文件                                                       | 传输                              | 备注                                                                        |
-| -------------- | ---------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------- |
-| 钉钉           | `packages/channels/dingtalk/src/DingtalkAdapter.ts:79-586` | DingTalk Stream SDK WebSocket     | 通过 `sessionWebhook` POST 出站；媒体图片走 DT API 下载，base64 进 envelope |
-| 微信（Weixin） | `packages/channels/weixin/src/WeixinAdapter.ts:33-309`     | iLink Bot HTTP 长轮询             | 通过专有 `sendText` / `sendImage` 出站；带打字指示                          |
-| Telegram       | `packages/channels/telegram/src/TelegramAdapter.ts:19-308` | Telegram Bot API 长轮询（grammy） | 通过 `sendMessage` 发 HTML 块                                               |
+| 适配器         | 文件                                                | 传输                                 | 备注                                                                                                                                  |
+| -------------- | --------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 钉钉           | `packages/channels/dingtalk/src/DingtalkAdapter.ts` | DingTalk Stream SDK WebSocket        | 通过 `sessionWebhook` POST 出站；媒体图片走 DT API 下载，base64 进 envelope                                                           |
+| 飞书（Lark）   | `packages/channels/feishu/src/FeishuAdapter.ts`     | Lark Event Subscription（HTTP 回调） | 通过 `@larksuiteoapi/node-sdk` 发互动卡片（`buildCardContent`）；支持 markdown 分块（`splitChunks`）；媒体文件下载（`downloadMedia`） |
+| 微信（Weixin） | `packages/channels/weixin/src/WeixinAdapter.ts`     | iLink Bot HTTP 长轮询                | 通过专有 `sendText` / `sendImage` 出站；带打字指示                                                                                    |
+| Telegram       | `packages/channels/telegram/src/TelegramAdapter.ts` | Telegram Bot API 长轮询（grammy）    | 通过 `sendMessage` 发 HTML 块                                                                                                         |
 
 每个适配器实现：
 
@@ -179,9 +181,10 @@ sequenceDiagram
 - `packages/channels/base/src/DaemonChannelBridge.ts:1-179+`
 - `packages/channels/base/src/ChannelBase.ts`
 - `packages/channels/base/src/types.ts:1-121`
-- `packages/channels/dingtalk/src/DingtalkAdapter.ts:79-586`
-- `packages/channels/weixin/src/WeixinAdapter.ts:33-309`
-- `packages/channels/telegram/src/TelegramAdapter.ts:19-308`
+- `packages/channels/dingtalk/src/DingtalkAdapter.ts`
+- `packages/channels/feishu/src/FeishuAdapter.ts`
+- `packages/channels/weixin/src/WeixinAdapter.ts`
+- `packages/channels/telegram/src/TelegramAdapter.ts`
 - `packages/channels/plugin-example/`（reference 插件骨架）
 - 渠道插件指南：[`../channel-plugins.md`](../channel-plugins.md)。
 - SDK 参考：[`13-sdk-daemon-client.md`](./13-sdk-daemon-client.md)。

@@ -30,23 +30,23 @@
 
 **Counters（5）**：
 
-- `qwen_code.daemon.http.request.count` — 按 route + status class 分维
-- `qwen_code.daemon.session.lifecycle` — spawn / close / die
-- `qwen_code.daemon.channel.lifecycle` — spawn / exit（含 `expected` 属性）
-- `qwen_code.daemon.bridge.error.count` — 按 normalized error type 分维（19 种已知类型 + `unknown`）
-- `qwen_code.daemon.cancel.count` — cancel 请求计数
+- `qwen-code.daemon.http.request.count` — 按 route + status class 分维
+- `qwen-code.daemon.session.lifecycle` — spawn / close / die
+- `qwen-code.daemon.channel.lifecycle` — spawn / exit（含 `expected` 属性）
+- `qwen-code.daemon.bridge.error.count` — 按 normalized error type 分维（19 种已知类型 + `unknown`）
+- `qwen-code.daemon.cancel.count` — cancel 请求计数
 
 **Histograms（3）**：
 
-- `qwen_code.daemon.http.request.duration` — ms，有显式 bucket 边界
-- `qwen_code.daemon.prompt.queue_wait` — ms，prompt FIFO 队列等待
-- `qwen_code.daemon.prompt.duration` — ms，端到端 prompt 耗时
+- `qwen-code.daemon.http.request.duration` — ms，有显式 bucket 边界
+- `qwen-code.daemon.prompt.queue_wait` — ms，prompt FIFO 队列等待
+- `qwen-code.daemon.prompt.duration` — ms，端到端 prompt 耗时
 
 **ObservableGauges（3）**：
 
-- `qwen_code.daemon.session.active` — 当前 session 数
-- `qwen_code.daemon.sse.active` — 当前 SSE 连接数
-- `qwen_code.daemon.process.heap_used` — 堆内存（bytes）
+- `qwen-code.daemon.session.active` — 当前 session 数
+- `qwen-code.daemon.sse.active` — 当前 SSE 连接数
+- `qwen-code.daemon.process.heap_used` — 堆内存（bytes）
 
 Resource 上带 `service.instance.id` 用于进程重启检测。shutdown 时 `forceFlushMetrics`（2s 超时）确保最后一批指标写出。
 

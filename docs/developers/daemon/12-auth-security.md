@@ -120,7 +120,7 @@ per-route opt-in 闸门。行为矩阵：
 
 `code: 'token_required'` 与 `bearerAuth` 普通 `Unauthorized` 不同形状，SDK 据此渲染「请用 --token / --require-auth 启动 daemon」提示而不是泛 401。
 
-**Wave 4+ strict 路由**：`/workspace/memory`、`/workspace/agents/*`、`/workspace/agents/generate`、`/file/write`、`/file/edit`、`/workspace/tools/:name/enable`、`/workspace/mcp/:server/restart`、`/workspace/mcp/:server/{enable,disable,authenticate,clear-auth}`、`/workspace/mcp/servers`（POST/DELETE）、`/workspace/auth/device-flow`、`/workspace/init`、`/session/:id/approval-mode`。
+**Wave 4+ strict 路由**：`/workspace/memory`、`/workspace/agents/*`、`/workspace/agents/generate`、`/workspace/agents/:agentType`（POST/DELETE）、`/file/write`、`/file/edit`、`/workspace/tools/:name/enable`、`/workspace/mcp/:server/restart`、`/workspace/mcp/:server/{enable,disable,authenticate,clear-auth}`、`/workspace/mcp/servers`（POST/DELETE）、`/workspace/auth/device-flow`（POST/GET/DELETE 含 `/:id`）、`/workspace/init`、`/session/:id/approval-mode`。
 
 ### `/health` 豁免
 

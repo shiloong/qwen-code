@@ -4,13 +4,13 @@
 
 它是对现有文档的补充，而不是替代：
 
-| 现有文档                                                                             | 受众               | 仍是该主题的事实来源                                                   |
-| ------------------------------------------------------------------------------------ | ------------------ | ---------------------------------------------------------------------- |
-| [`../../users/qwen-serve.md`](../../users/qwen-serve.md)                             | 运维 / 使用者      | 启动方式、命令行参数、威胁模型                                         |
-| [`../qwen-serve-protocol.md`](../qwen-serve-protocol.md)                             | 协议实现者         | HTTP 路由清单、请求/响应结构、错误码                                   |
-| [`../examples/daemon-client-quickstart.md`](../examples/daemon-client-quickstart.md) | SDK 使用者         | TS 端到端示例                                                          |
-| [`../daemon-client-adapters/`](../daemon-client-adapters/)                           | 适配器作者（草案） | 每种客户端的设计草案                                                   |
-| [`../../design/f2-mcp-transport-pool.md`](../../design/f2-mcp-transport-pool.md)     | F2 维护者          | 工作区共享 MCP transport 池设计 v2.2（32 条 review fold-in changelog） |
+| 现有文档                                                                             | 受众               | 仍是该主题的事实来源                      |
+| ------------------------------------------------------------------------------------ | ------------------ | ----------------------------------------- |
+| [`../../users/qwen-serve.md`](../../users/qwen-serve.md)                             | 运维 / 使用者      | 启动方式、命令行参数、威胁模型            |
+| [`../qwen-serve-protocol.md`](../qwen-serve-protocol.md)                             | 协议实现者         | HTTP 路由清单、请求/响应结构、错误码      |
+| [`../examples/daemon-client-quickstart.md`](../examples/daemon-client-quickstart.md) | SDK 使用者         | TS 端到端示例                             |
+| [`../daemon-client-adapters/`](../daemon-client-adapters/)                           | 适配器作者（草案） | 每种客户端的设计草案                      |
+| [`05-mcp-transport-pool.md`](./05-mcp-transport-pool.md)                             | F2 维护者          | 工作区共享 MCP transport 池（本文档集内） |
 
 如果你想 **快速把 daemon 跑起来 + 验证它工作**，直接看 [`20-quickstart-operations.md`](./20-quickstart-operations.md)；如果你想 **基于 wire 协议构建一个客户端**，先看 `qwen-serve-protocol.md`；如果你想 **理解 daemon 内部如何工作、扩展它或调试它**，就读本文档集 01–19。
 
@@ -85,7 +85,7 @@
 ## 本文档集**不**覆盖的内容
 
 - **Java / Python SDK 的 daemon 客户端** — 目前只有 TS SDK 有 daemon 客户端，第 13 篇只覆盖 TS。
-- **Web UI 详细产品形态** — 自 [#4328](https://github.com/QwenLM/qwen-code/pull/4328) 起 `packages/webui/src/daemon/` 已经是真正的 daemon 前端（React `DaemonSessionProvider` + transcriptAdapter，消费 SDK `ui/*` 子包）。架构走法和 selectors 在 [`14-cli-tui-adapter.md`](./14-cli-tui-adapter.md) 一并讲；webui 自身的产品形态（设计、布局、复用到哪里）参考 [`../daemon-client-adapters/web-ui.md`](../daemon-client-adapters/web-ui.md) 与 [`../daemon-ui/README.md`](../daemon-ui/README.md)。
+- **Web UI 详细产品形态** — 自 [#4328](https://github.com/QwenLM/qwen-code/pull/4328) 起 `packages/webui/src/daemon/` 已经是真正的 daemon 前端（React `DaemonSessionProvider` + transcriptAdapter，消费 SDK `ui/*` 子包）。架构走法和 selectors 在 [`14-cli-tui-adapter.md`](./14-cli-tui-adapter.md) 一并讲。
 - **Zed extension (`packages/zed-extension/`)** — 直接用 stdio ACP 拉起 `qwen --acp`，不走 daemon，不需要 daemon 章节。
 - **F4（进行中）** — 协议补齐和 `qwen --serve` 同进程托管。写文档时该 surface 还不稳定，等落地后再补章。
 
@@ -136,8 +136,8 @@
 
 ### 历史 / 已弃用 surface
 
-- **`packages/cli/src/ui/daemon/DaemonTuiAdapter.ts`** 与整个 `packages/cli/src/ui/daemon/` 目录已删除，由共享 UI Transcript 层（第 14 篇）取代。CLI TUI、channel base、VSCode IDE 三条产品路径会陆续迁过去，迁移指南见 [`../daemon-ui/MIGRATION.md`](../daemon-ui/MIGRATION.md)。
-- **`docs/developers/daemon-client-adapters/tui.md`** 草案已过时（描述的 `DaemonTuiAdapter` 已被共享 UI Transcript 层取代），请参考 [`14-cli-tui-adapter.md`](./14-cli-tui-adapter.md)。新的 [`../daemon-client-adapters/web-ui.md`](../daemon-client-adapters/web-ui.md) 是 web UI 适配器的设计草案。
+- **`packages/cli/src/ui/daemon/DaemonTuiAdapter.ts`** 与整个 `packages/cli/src/ui/daemon/` 目录已删除，由共享 UI Transcript 层（第 14 篇）取代。CLI TUI、channel base、VSCode IDE 三条产品路径会陆续迁过去。
+- **`docs/developers/daemon-client-adapters/tui.md`** 草案已过时（描述的 `DaemonTuiAdapter` 已被共享 UI Transcript 层取代），请参考 [`14-cli-tui-adapter.md`](./14-cli-tui-adapter.md)。
 
 ### 向前兼容
 

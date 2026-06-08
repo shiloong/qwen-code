@@ -111,7 +111,7 @@ agent 的 RPC client 现在拿到 `data.errorKind`（封闭 `FsErrorKind` 值）
 
 ### 信任 gate
 
-`assertTrustedForIntent(intent)` 查 `Config.isTrustedFolder()`。read / list / stat / glob 总是允许（信任只对写起作用）。在不被信任的 workspace 上 write 意图抛 `FsError('untrusted_workspace', ..., status: 403)`。trust 信号通过 `WorkspaceFileSystemFactoryDeps.trusted: boolean` 注入 —— `runQwenServe` 传 `true`（operator 自己启动 daemon 即默认信任那 workspace）；`createServeApp` 直接嵌入默认 `false` 并 process 内告警一次（详见 [`02-serve-runtime.md`](./02-serve-runtime.md)）。
+`assertTrustedForIntent(intent)` 查 `Config.isTrustedFolder()`。read / list / stat / glob 总是允许（信任只对写起作用）。在不被信任的 workspace 上 write 意图抛 `FsError('untrusted_workspace', ..., status: 403)`。trust 信号通过 `CreateWorkspaceFileSystemFactoryDeps.trusted: boolean` 注入 —— `runQwenServe` 传 `true`（operator 自己启动 daemon 即默认信任那 workspace）；`createServeApp` 直接嵌入默认 `false` 并 process 内告警一次（详见 [`02-serve-runtime.md`](./02-serve-runtime.md)）。
 
 ## 流程
 

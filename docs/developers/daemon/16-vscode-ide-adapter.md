@@ -21,12 +21,11 @@ IDE 的 chat webview 通过本适配器消费 daemon 事件；权限请求以 VS
 
 ```ts
 class DaemonIdeConnection {
-  constructor(opts: DaemonIdeConnectionOptions);
+  // 无显式 constructor；通过 connect() 连接
   connect(options: DaemonIdeConnectionOptions): Promise<void>;
   disconnect(): Promise<void>;
   sendPrompt(prompt): Promise<PromptResult>;
   cancelSession(): Promise<void>;
-  respondToPermission(req): Promise<void>;
   setModel(modelId): Promise<DaemonIdeSetModelResult>;
 
   onSessionUpdate: (data: SessionNotification) => void;
@@ -43,7 +42,7 @@ class DaemonIdeConnection {
 interface DaemonIdeConnectionOptions {
   baseUrl: string; // 必须 loopback（127.0.0.1 / localhost / [::1]）
   token?: string;
-  workspaceCwd: string;
+  workspaceCwd?: string;
   modelServiceId?: string;
   lastEventId?: number;
 }
@@ -55,7 +54,7 @@ interface DaemonIdeConnectionOptions {
 
 ```ts
 const parsed = new URL(opts.baseUrl);
-if (!isLoopbackHost(parsed.hostname)) {
+if (!isLoopbackHostname(parsed.hostname)) {
   throw new Error('DaemonIdeConnection: baseUrl must be loopback (...)');
 }
 ```

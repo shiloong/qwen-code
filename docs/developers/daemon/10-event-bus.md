@@ -4,7 +4,7 @@
 
 `EventBus`（`packages/acp-bridge/src/eventBus.ts`）是每 session 一份的内存 pub/sub，喂给 daemon 的 `GET /session/:id/events` SSE 路由。它给每个事件分配单调 id、用有界环形缓冲缓存最近事件给 `Last-Event-ID` 重放、把 publish 扇出到所有订阅者、对订阅者实施反压（队列 75% 满时发警告、达到上限时驱逐），还会合成终态帧 `client_evicted` 与警告帧 `slow_client_warning`（37.5% 滞回重臂，**非终态**、可重复发送），SDK 把它们当一等事件，但 bus 故意**不**给它们分配 `id`，防止它们占掉本 session 的序列号让其他订阅者看到断档。
 
-`EventBus` 目前是 `acp-bridge` 包内部的实现，bridge 工厂为每 session 闭包持有一份。未来 refactor（文件 line 150–159 提到）会把它升到顶层组件，channels、dual-output 以及未来 WebSocket 传输都能通过同一 bus 订阅，而不必各跑一条并行流。
+`EventBus` 目前是 `acp-bridge` 包内部的实现，bridge 工厂为每 session 闭包持有一份。源码注释里预留了未来 refactor 方向：把它升到顶层组件，channels、dual-output 以及未来 WebSocket 传输都能通过同一 bus 订阅，而不必各跑一条并行流。
 
 ## 职责
 
@@ -35,7 +35,7 @@
 interface BridgeEvent {
   id?: number; // per session 单调；合成终态帧无 id
   v: 1; // EVENT_SCHEMA_VERSION
-  type: string; // 38 已知 type 之一或未来扩展
+  type: string; // 39 已知 type 之一或未来扩展
   data: unknown; // payload，SDK 按 type typed（详见 09）
   originatorClientId?: string; // 由带 clientId 的请求派生
 }
@@ -120,22 +120,26 @@ subscribe 时 `subs.size >= maxSubscribers` 抛 `SubscriberLimitExceededError`�
 
 当消费方带 `Last-Event-ID: N` 重连，但环里最早留存事件的 `id > N + 1`，说明 `[N+1, earliestInRing-1]` 这段在重连前被 evict 了。朴素重放会默默成功但拿到一个非连续后缀，SDK reducer 当作连续流继续 apply delta，状态就与 daemon 真相分叉 —— 全程没有终态信号。
 
-实现在 `packages/acp-bridge/src/eventBus.ts:359-402`：
+实现在 `packages/acp-bridge/src/eventBus.ts:359-402`。有两种触发路径：
 
-1. 算 `earliestInRing = this.ring[0]?.id`。
-2. 若 `earliestInRing > opts.lastEventId + 1`，在重放帧**之前**强推一帧合成：
-   ```jsonc
-   {
-     "v": 1,
-     "type": "state_resync_required",
-     "data": {
-       "reason": "ring_evicted",
-       "lastDeliveredId": <opts.lastEventId>,
-       "earliestAvailableId": <earliestInRing>
-     }
-   }
-   ```
-3. 之后照常做重放循环。
+**路径 1：`ring_evicted`** —— 消费方的 `lastEventId + 1` 已被环驱逐（`earliestInRing > opts.lastEventId + 1`）。
+**路径 2：`epoch_reset`** —— 消费方的 `lastEventId >= this.nextId`，说明游标来自上一个 bus epoch（daemon 重启后 ID 重新从 1 开始）。
+
+两种路径都在重放帧**之前**强推一帧合成：
+
+```jsonc
+{
+  "v": 1,
+  "type": "state_resync_required",
+  "data": {
+    "reason": "ring_evicted" | "epoch_reset",
+    "lastDeliveredId": <opts.lastEventId>,
+    "earliestAvailableId": <earliestInRing>
+  }
+}
+```
+
+之后照常做重放循环。
 
 关键契约（以及 wenshao #4360 review 修正过的几点）：
 

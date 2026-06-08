@@ -189,6 +189,46 @@ Stable contract: when `v` increments the frame layout has changed in a backwards
 
 > **`workspaceCwd`** is the canonical absolute path this daemon binds to (#3803 §02 — 1 daemon = 1 workspace). Use it to (a) detect mismatch before posting `/session` and (b) omit `cwd` on `POST /session` (the route falls back to this path). Multi-workspace deployments expose multiple daemons on different ports, each with its own `workspaceCwd`. Additive to v=1: pre-§02 v=1 daemons omit the field — clients that target older builds should null-check before consuming it.
 
+### ACP Streamable HTTP (`/acp`)
+
+The REST routes in this document remain the stable daemon HTTP API. In
+parallel, daemon also mounts the official ACP Streamable HTTP transport at
+`/acp` (unless `QWEN_SERVE_ACP_HTTP=0`). The transport carries JSON-RPC 2.0
+messages and uses headers to bind a request to a daemon-owned ACP connection.
+
+Wire shape:
+
+| Request                        | Required headers                      | Response                                                                                           |
+| ------------------------------ | ------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `POST /acp` with `initialize`  | none                                  | `200` JSON-RPC result; response header `Acp-Connection-Id` contains the new connection id          |
+| `POST /acp` with other message | `Acp-Connection-Id`                   | `202`; JSON-RPC reply is delivered on an SSE stream                                                |
+| `GET /acp`                     | `Acp-Connection-Id`                   | connection-scoped SSE stream                                                                       |
+| `GET /acp`                     | `Acp-Connection-Id`, `Acp-Session-Id` | session-scoped SSE stream; `403` if this connection does not own the session                       |
+| `DELETE /acp`                  | `Acp-Connection-Id`                   | `202`; deletes the connection, tears down owned session streams, and cancels abandoned permissions |
+
+Successful `initialize` example:
+
+```http
+POST /acp
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"v1"}}
+```
+
+```http
+HTTP/1.1 200 OK
+Acp-Connection-Id: conn_...
+Content-Type: application/json
+
+{"jsonrpc":"2.0","id":1,"result":{...}}
+```
+
+Connection and session SSE frames carry raw JSON-RPC objects in `data:`. The
+connection registry enforces ownership: a session stream only opens when the
+connection created, loaded, or resumed that session. If the connection stream
+closes, the registry waits a short grace window before reaping it, unless a
+session stream is still live or the connection reconnects.
+
 ### Read-only runtime status routes
 
 These routes report daemon-side runtime snapshots. They are additive v1 routes,
@@ -206,8 +246,10 @@ Capability tags:
 - `workspace_providers` → `GET /workspace/providers`
 - `workspace_env` → `GET /workspace/env`
 - `workspace_preflight` → `GET /workspace/preflight`
+- `workspace_hooks` → `GET /workspace/hooks`
 - `session_context` → `GET /session/:id/context`
 - `session_supported_commands` → `GET /session/:id/supported-commands`
+- `session_hooks` → `GET /session/:id/hooks`
 
 Common status cell:
 
@@ -630,6 +672,73 @@ request (e.g. a mid-request channel close), the envelope's `errors` array
 carries a single `ServeStatusCell` describing the failure and the cells
 fall back to `not_started` ACP placeholders. Daemon-level cells are still
 returned.
+
+### Hook diagnostic routes
+
+These are read-only diagnostic routes. They never execute hooks and never
+toggle enable state. They expose the hook registry shape a UI needs to explain
+why a daemon or session will run a hook.
+
+#### `GET /workspace/hooks`
+
+Capability tag: `workspace_hooks`.
+
+Returns workspace-visible hook configuration plus event metadata. The route
+uses the workspace facade and does not spawn the ACP child solely to answer the
+request.
+
+Response:
+
+```json
+{
+  "v": 1,
+  "workspaceCwd": "/canonical/path",
+  "initialized": true,
+  "disabled": false,
+  "hooks": [
+    {
+      "kind": "hook",
+      "eventName": "PreToolUse",
+      "source": "project",
+      "matcher": "run_shell_command",
+      "sequential": true,
+      "enabled": true,
+      "config": { "type": "command", "command": "./hooks/check.sh" }
+    }
+  ],
+  "events": {
+    "PreToolUse": {
+      "description": "Before tool execution",
+      "matcherKind": "toolName"
+    }
+  }
+}
+```
+
+`source` is one of `project | user | system | extensions | session`.
+`config.type` is one of the shipped hook config variants (`command`, `http`,
+`function`, `prompt`) or an unknown string for forward compatibility. When hook
+loading fails, the route still returns the envelope and populates `errors`.
+
+#### `GET /session/:id/hooks`
+
+Capability tag: `session_hooks`.
+
+Returns the hooks visible to a live session. Unknown sessions use the standard
+`404 SessionNotFoundError` shape.
+
+Response:
+
+```json
+{
+  "v": 1,
+  "sessionId": "sess:42",
+  "workspaceCwd": "/canonical/path",
+  "disabled": false,
+  "hooks": [],
+  "errors": []
+}
+```
 
 ### Workspace file routes
 
@@ -1099,6 +1208,71 @@ Response:
 
 On success, publishes `model_switched` to the SSE stream. On failure, publishes `model_switch_failed` (so passive subscribers see the failure, not just the caller). Races against the agent channel exit so a wedged child can't block the HTTP handler.
 
+### Session rewind routes
+
+Capability tag: `session_rewind`. Bridge → ACP extMethods
+`qwen/status/session/rewind_snapshots` and `qwen/control/session/rewind`.
+
+#### `GET /session/:id/rewind/snapshots`
+
+List turn snapshots that can be used as rewind targets. This is a read-only
+status route. Unknown sessions use the standard `404 SessionNotFoundError`
+shape.
+
+Response:
+
+```json
+{
+  "snapshots": [
+    {
+      "promptId": "prompt-123",
+      "turnIndex": 7,
+      "timestamp": "2026-06-07T10:15:30.000Z",
+      "diffStats": {
+        "filesChanged": 2,
+        "insertions": 24,
+        "deletions": 3
+      }
+    }
+  ]
+}
+```
+
+#### `POST /session/:id/rewind`
+
+Strict mutation-gated route. Rewinds conversation history to the requested
+turn and asks the ACP child to restore file snapshots best-effort.
+
+Request:
+
+```json
+{ "promptId": "prompt-123" }
+```
+
+Response:
+
+```json
+{
+  "rewound": true,
+  "targetTurnIndex": 7,
+  "filesChanged": ["src/app.ts"],
+  "filesFailed": []
+}
+```
+
+`rewound=false` means the conversation rewind succeeded but one or more file
+restores failed; callers should render `filesFailed` rather than treating the
+whole request as a transport failure.
+
+Errors:
+
+- `400 {code: 'missing_prompt_id'}` — body omitted `promptId` or supplied an empty string.
+- `400 {code: 'invalid_rewind_target'}` — target turn is compressed or does not exist.
+- `409 {code: 'session_busy'}` — the session has an active prompt.
+- `404` — session unknown.
+
+SSE event (session-scoped): `session_rewound` with `{sessionId, promptId, targetTurnIndex, filesChanged, filesFailed, originatorClientId?}`.
+
 ### Mutation: approval, tools, init, MCP restart
 
 Issue [#4175](https://github.com/QwenLM/qwen-code/issues/4175) Wave 4 PR 17 adds four mutation control routes that let remote clients change runtime posture without touching the daemon host's CLI. All four:
@@ -1451,10 +1625,16 @@ The connection then closes.
 
 ## Environment variables
 
-| Var                 | Purpose                                                                                                                                                             |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `QWEN_SERVER_TOKEN` | Bearer token. Stripped of leading/trailing whitespace at boot.                                                                                                      |
-| `SKIP_LLM_TESTS`    | Set to `1` to **skip** LLM-required integration tests in `integration-tests/cli/qwen-serve-streaming.test.ts` (default-on for CI envs that lack provider API keys). |
+| Var                                                                                         | Purpose                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `QWEN_SERVER_TOKEN`                                                                         | Bearer token. Stripped of leading/trailing whitespace at boot.                                                                                                      |
+| `QWEN_SERVE_DEBUG`                                                                          | Enables verbose stderr diagnostics and verbose error context on selected daemon responses.                                                                          |
+| `QWEN_SERVE_NO_MCP_POOL`                                                                    | `1` disables workspace MCP transport pooling; `mcp_workspace_pool` / `mcp_pool_restart` are omitted from `/capabilities`.                                           |
+| `QWEN_SERVE_ACP_HTTP`                                                                       | `0` disables the `/acp` ACP Streamable HTTP transport.                                                                                                              |
+| `QWEN_DAEMON_LOG_FILE`                                                                      | `0` / `false` / `off` / `no` disables structured daemon log file creation.                                                                                          |
+| `QWEN_SERVE_PROMPT_DEADLINE_MS` / `QWEN_SERVE_WRITER_IDLE_TIMEOUT_MS`                       | Env fallbacks for the matching serve flags.                                                                                                                         |
+| `QWEN_TELEMETRY_*`, `OTEL_EXPORTER_OTLP_*`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_SERVICE_NAME` | Daemon telemetry env overrides; env wins over `settings.json telemetry`.                                                                                            |
+| `SKIP_LLM_TESTS`                                                                            | Set to `1` to **skip** LLM-required integration tests in `integration-tests/cli/qwen-serve-streaming.test.ts` (default-on for CI envs that lack provider API keys). |
 
 ## Source layout
 
@@ -1464,7 +1644,10 @@ The connection then closes.
 | `packages/cli/src/serve/runQwenServe.ts`             | listener lifecycle + signal handling                                                                       |
 | `packages/cli/src/serve/server.ts`                   | Express routes + middleware                                                                                |
 | `packages/cli/src/serve/auth.ts`                     | bearer + Host allowlist + CORS deny                                                                        |
-| `packages/cli/src/serve/httpAcpBridge.ts`            | spawn-or-attach + per-session FIFO + permission registry                                                   |
+| `packages/cli/src/serve/acpSessionBridge.ts`         | re-export shim for `@qwen-code/acp-bridge`                                                                 |
+| `packages/cli/src/serve/acpHttp/`                    | ACP Streamable HTTP transport mounted at `/acp`                                                            |
+| `packages/cli/src/serve/workspace-service/`          | facade for workspace status and mutation routes                                                            |
+| `packages/cli/src/serve/daemonLogger.ts`             | structured daemon file logger                                                                              |
 | `packages/cli/src/serve/status.ts`                   | read-only daemon status wire types + `ServeErrorKind` + `BridgeTimeoutError` + `mapDomainErrorToErrorKind` |
 | `packages/cli/src/serve/envSnapshot.ts`              | pure helper that builds `/workspace/env` payloads from `process.*` state, including credential redaction   |
 | `packages/cli/src/serve/eventBus.ts`                 | bounded async queue + replay ring                                                                          |

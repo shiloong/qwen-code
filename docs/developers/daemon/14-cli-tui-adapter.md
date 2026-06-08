@@ -6,7 +6,7 @@
 
 `packages/sdk-typescript/src/daemon/ui/` 是 SDK 新增的 `ui/*` 子包，把「daemon SSE 事件 → UI 可渲染 transcript blocks」这条变换链做成可复用原语：
 
-- **归一化层** (`normalizer.ts`)：把 daemon wire 上 38 种 typed event（详见 [`09-event-schema.md`](./09-event-schema.md)）映射成 UI 友好的 `DaemonUiEventType`（34 种语义事件，命名风格 `assistant.text.delta` / `tool.update` / `session.metadata.changed`）。
+- **归一化层** (`normalizer.ts`)：把 daemon wire 上 39 种 typed event（详见 [`09-event-schema.md`](./09-event-schema.md)）映射成 UI 友好的 `DaemonUiEventType`（34 种语义事件，命名风格 `assistant.text.delta` / `tool.update` / `session.metadata.changed`）。
 - **状态机** (`transcript.ts`, `store.ts`)：纯函数 reducer + 可订阅 store，把 UI 事件流投到一个有序的 `DaemonTranscriptBlock[]`。
 - **渲染器** (`render.ts`, `terminal.ts`, `toolPreview.ts`)：transcript blocks → HTML / 终端字符 / tool preview 字符串。宿主可挑用。
 - **conformance** (`conformance.ts`)：跨宿主一致性测试套件，channel / TUI / IDE 迁移到这套时用来确保渲染等价。
@@ -15,7 +15,7 @@
 
 ## 职责
 
-- 把 38 种 daemon wire event 归一成稳定 UI 词汇（`DaemonUiEventType`），让 renderer 不再去读 `rawEvent.data`。
+- 把 39 种 daemon wire event 归一成稳定 UI 词汇（`DaemonUiEventType`），让 renderer 不再去读 `rawEvent.data`。
 - 维护 daemon-monotonic SSE 游标（`eventId`）作为**主排序键**，多端 transcript 同序。
 - 用纯 reducer 投到 transcript block 列表（带 selectors 拿 pending permission / current tool / approval mode / tool progress 等）。
 - 提供 HTML 与终端两种基线渲染（宿主可自定义）。
@@ -71,7 +71,7 @@
 - `auth.device_flow.started`、`auth.device_flow.throttled`、`auth.device_flow.authorized`
 - `auth.device_flow.failed`、`auth.device_flow.cancelled`
 
-`normalizeDaemonEvent` 把 daemon wire 上的 38 种 typed event（见 [`09-event-schema.md`](./09-event-schema.md)）映射进来；未知 type 归一为 `debug`，保留 `rawEvent` 给宿主诊断。
+`normalizeDaemonEvent` 把 daemon wire 上的 39 种 typed event（见 [`09-event-schema.md`](./09-event-schema.md)）映射进来；未知 type 归一为 `debug`，保留 `rawEvent` 给宿主诊断。
 
 ### Reducer / selectors
 

@@ -9,7 +9,7 @@
 - **条件广播**。六个 tag（`require_auth`、`mcp_workspace_pool`、`mcp_pool_restart`、`allow_origin`、`prompt_absolute_deadline`、`writer_idle_timeout`）只在对应部署开关打开时才广播；tag 存在 = 行为存在。
 - **Capability tag = 行为契约**。在已有 tag 下加新行为会悄悄破坏已有的 pre-flight 检查；**新行为对应新 tag**。
 
-完整注册表在 `packages/cli/src/serve/capabilities.ts:37-215`。
+完整注册表在 `packages/cli/src/serve/capabilities.ts`。
 
 ## 职责
 
@@ -83,11 +83,11 @@ export const CONDITIONAL_SERVE_FEATURES: ReadonlyMap<
 
 基线 tag（Map 里没有）无条件广播 —— 这个决定是**用「不写」表达**的，不需要专门维护一个 Set。
 
-### 54 个 tag（v1，按域）
+### 58 个 tag（v1，按域）
 
 Foundation：`health`、`capabilities`。
 
-Sessions：`session_create`、`session_scope_override`、`session_load`、`unstable_session_resume`、`session_list`、`session_prompt`、`session_cancel`、`session_events`、`session_set_model`、`session_close`、`session_metadata`、`session_context`、`session_context_usage`、`session_supported_commands`、`session_tasks`、`session_stats`、`session_approval_mode_control`、`session_recap`、`session_btw`。
+Sessions：`session_create`、`session_scope_override`、`session_load`、`unstable_session_resume`、`session_list`、`session_prompt`、`session_cancel`、`session_events`、`session_set_model`、`session_close`、`session_metadata`、`session_context`、`session_context_usage`、`session_supported_commands`、`session_tasks`、`session_stats`、`session_approval_mode_control`、`session_recap`、`session_btw`、`session_rewind`、`session_hooks`。
 
 Streaming：`slow_client_warning`、`typed_event_schema`。
 
@@ -95,9 +95,9 @@ Identity & heartbeat：`client_identity`、`client_heartbeat`。
 
 Permissions：`session_permission_vote`、`permission_vote`、**`permission_mediation`**（`modes: ['first-responder', 'designated', 'consensus', 'local-only']`）。
 
-Workspace 只读快照：`workspace_mcp`、`workspace_skills`、`workspace_providers`、`workspace_env`、`workspace_preflight`。
+Workspace 只读快照：`workspace_mcp`、`workspace_skills`、`workspace_providers`、`workspace_env`、`workspace_preflight`、`workspace_extensions`。
 
-Workspace 修改（Wave 4+）：`workspace_memory`、`workspace_agents`、`workspace_agent_generate`、`workspace_tool_toggle`、`workspace_init`、`workspace_mcp_restart`、`workspace_mcp_manage`、`workspace_file_read`、`workspace_file_bytes`、`workspace_file_write`。
+Workspace 修改（Wave 4+）：`workspace_memory`、`workspace_agents`、`workspace_agent_generate`、`workspace_tool_toggle`、`workspace_init`、`workspace_mcp_restart`、`workspace_mcp_manage`、`workspace_file_read`、`workspace_file_bytes`、`workspace_file_write`、`workspace_hooks`。
 
 MCP guardrails：**`mcp_guardrails`**（`modes: ['warn', 'enforce']`）、`mcp_guardrail_events`、`mcp_server_runtime_mutation`、**`mcp_workspace_pool`**（条件）、**`mcp_pool_restart`**（条件）。
 
@@ -173,7 +173,7 @@ sequenceDiagram
 
 ## 参考
 
-- `packages/cli/src/serve/capabilities.ts:1-330`（整文件）
+- `packages/cli/src/serve/capabilities.ts`（整文件）
 - `packages/cli/src/serve/types.ts:37-155`（`ServeOptions`、`CapabilitiesEnvelope`）
 - `packages/cli/src/serve/server.ts`（envelope 装配）
 - `packages/acp-bridge/src/eventBus.ts:22`（`EVENT_SCHEMA_VERSION`）

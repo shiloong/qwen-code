@@ -40,7 +40,7 @@ bridge 提供：一个 `AcpSessionBridge` 实例、一条 `AcpChannel` 连到 AC
 
 | 状态            | 形态                            | 用途                                                                                                                                                                                                                                                                                                                               |
 | --------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `aliveChannels` | `Map<string, ChannelInfo>`      | channel 注册表；每条 `ChannelInfo` 包括 `channel`、`connection`、`client`（每 channel 一个 `BridgeClient`）、`sessionIds: Set<string>`、`pendingRestoreIds`、`statusClosedReject?`、`isDying: boolean`                                                                                                                             |
+| `aliveChannels` | `Set<ChannelInfo>`              | channel 注册表；每条 `ChannelInfo` 包括 `channel`、`connection`、`client`（每 channel 一个 `BridgeClient`）、`sessionIds: Set<string>`、`pendingRestoreIds`、`statusClosedReject?`、`isDying: boolean`                                                                                                                             |
 | `byId`          | `Map<string, SessionEntry>`     | session 注册表；每个 `SessionEntry` 包括 `channel`、`connection`、`events: EventBus`、`promptQueue`、`modelChangeQueue`、`pendingPermissionIds: Set<string>`、`clientIds: Map<string, count>`、`activePromptOriginatorClientId?`、`attachCount`、`spawnOwnerWantedKill`、`restoreState?`、`sessionLastSeenAt?`、`clientLastSeenAt` |
 | `defaultEntry`  | `SessionEntry \| null`          | `sessionScope: 'single'` 下共享的那个 session                                                                                                                                                                                                                                                                                      |
 | `defaultPolicy` | `PermissionPolicy`              | 由 `BridgeOptions.permissionPolicy` 决定                                                                                                                                                                                                                                                                                           |
@@ -212,30 +212,37 @@ sequenceDiagram
 | `permissionConsensusQuorum`       | 从 `settings.json`                                | consensus 策略的 N                                             |
 | `permissionAudit`                 | `createNoOpPermissionAuditPublisher()`            | 接到 `PermissionAuditRing`                                     |
 | `channelIdleTimeoutMs`            | `0`                                               | 最后 session 关闭后保活 ACP child 的毫秒数                     |
+| `telemetry`                       | （无）                                            | `BridgeTelemetry` 接口，OTel span / event / metrics 注入       |
+| `onDiagnosticLine`                | （无）                                            | `DiagnosticLineSink`，tee `writeServeDebugLine` 输出           |
 
 ## 新增 bridge 方法（daemon_mode_b_main）
 
 基础的 `spawnOrAttach`、`sendPrompt`、`cancelSession`、`respondToPermission`、`loadSession`、`resumeSession` 之外，`AcpSessionBridge` 接口现在还包含以下方法：
 
-| 方法                                                         | 作用                                   |
-| ------------------------------------------------------------ | -------------------------------------- |
-| `generateSessionRecap(sessionId, context?)`                  | 一句话 session 摘要                    |
-| `generateSessionBtw(sessionId, question, signal?, context?)` | side-question / btw                    |
-| `executeShellCommand(sessionId, command, signal?, context?)` | daemon 宿主上直接执行 shell 命令       |
-| `getSessionContextUsageStatus(sessionId, opts?)`             | context window 用量                    |
-| `getSessionSupportedCommandsStatus(sessionId)`               | 可用 slash 命令                        |
-| `getSessionTasksStatus(sessionId)`                           | 后台任务快照                           |
-| `getSessionStatsStatus(sessionId)`                           | session 使用统计                       |
-| `setSessionApprovalMode(sessionId, mode, opts, context?)`    | 修改 approval mode                     |
-| `detachClient(sessionId, clientId?)`                         | 显式解绑客户端                         |
-| `addRuntimeMcpServer(name, config, originatorClientId)`      | 运行时新增 MCP server                  |
-| `removeRuntimeMcpServer(name, originatorClientId)`           | 运行时移除 MCP server                  |
-| `manageMcpServer(serverName, action, originatorClientId)`    | enable/disable/authenticate/clear-auth |
-| `generateWorkspaceAgent(description, originatorClientId)`    | AI 生成 subagent 定义                  |
-| `preheat()`                                                  | 预热 ACP child（skip cold-start）      |
-| `getSessionLastEventId(sessionId)`                           | 获取 session 的单调事件 ID             |
-| `getWorkspaceToolsStatus()`                                  | 内建工具注册表快照                     |
-| `getWorkspaceMcpToolsStatus(serverName)`                     | 指定 MCP server 的工具列表             |
+| 方法                                                         | 作用                                    |
+| ------------------------------------------------------------ | --------------------------------------- |
+| `generateSessionRecap(sessionId, context?)`                  | 一句话 session 摘要                     |
+| `generateSessionBtw(sessionId, question, signal?, context?)` | side-question / btw                     |
+| `executeShellCommand(sessionId, command, signal?, context?)` | daemon 宿主上直接执行 shell 命令        |
+| `getSessionContextUsageStatus(sessionId, opts?)`             | context window 用量                     |
+| `getSessionSupportedCommandsStatus(sessionId)`               | 可用 slash 命令                         |
+| `getSessionTasksStatus(sessionId)`                           | 后台任务快照                            |
+| `getSessionStatsStatus(sessionId)`                           | session 使用统计                        |
+| `setSessionApprovalMode(sessionId, mode, opts, context?)`    | 修改 approval mode                      |
+| `detachClient(sessionId, clientId?)`                         | 显式解绑客户端                          |
+| `addRuntimeMcpServer(name, config, originatorClientId)`      | 运行时新增 MCP server                   |
+| `removeRuntimeMcpServer(name, originatorClientId)`           | 运行时移除 MCP server                   |
+| `manageMcpServer(serverName, action, originatorClientId)`    | enable/disable/authenticate/clear-auth  |
+| `generateWorkspaceAgent(description, originatorClientId)`    | AI 生成 subagent 定义                   |
+| `preheat()`                                                  | 预热 ACP child（skip cold-start）       |
+| `getSessionLastEventId(sessionId)`                           | 获取 session 的单调事件 ID              |
+| `getWorkspaceToolsStatus()`                                  | 内建工具注册表快照                      |
+| `getWorkspaceMcpToolsStatus(serverName)`                     | 指定 MCP server 的工具列表              |
+| `getWorkspaceHooksStatus()`                                  | workspace 级 hook 配置状态              |
+| `getSessionHooksStatus(sessionId)`                           | session 级 hook 状态                    |
+| `getWorkspaceExtensionsStatus()`                             | workspace 级已安装扩展状态              |
+| `getRewindSnapshots(sessionId)`                              | 可回退快照列表（含 per-turn diff 统计） |
+| `rewindSession(sessionId, req, context?)`                    | 回退 session 到指定 turn                |
 
 此外，`BridgeSpawnRequest.sessionScope` 的 `'per-client'` 已更名为 `'thread'`。`BridgeRestoredSession` 新增 `compactedReplay`、`liveJournal`、`lastEventId` 字段。`BridgeClientRequestContext` 是贯穿 bridge 方法调用的请求上下文类型，携带 `clientId`、`fromLoopback`、`promptId`。
 

@@ -16,7 +16,7 @@ qwen serve: bound to workspace "/your/cwd"
 qwen serve: bearer auth disabled (loopback default). Set QWEN_SERVER_TOKEN to enable.
 ```
 
-浏览器开 `http://127.0.0.1:4170/demo` 就能看到调试控制台（聊天 UI + 事件流 + workspace 检视）。loopback dev 默认下 `/demo` 注册在 `bearerAuth` **之前**（`packages/cli/src/serve/server.ts:611-612`），无需 token。
+浏览器开 `http://127.0.0.1:4170/demo` 就能看到调试控制台（聊天 UI + 事件流 + workspace 检视）。loopback dev 默认下 `/demo` 注册在 `bearerAuth` **之前**，无需 token。
 
 ## 2. 启动姿势速查
 
@@ -62,13 +62,16 @@ qwen serve --prompt-deadline-ms 300000 --writer-idle-timeout-ms 600000
 
 # 12. ACP child 空闲保活（避免反复冷启动）
 qwen serve --channel-idle-timeout-ms 60000
+
+# 13. 关闭 ACP Streamable HTTP transport，只保留 REST surface
+QWEN_SERVE_ACP_HTTP=0 qwen serve
 ```
 
-加固 loopback 的姿势（3）下 `/demo` 会移到 `bearerAuth` 之后（`server.ts:625-626`），浏览器开就要带 token 头才能用了 —— 通常配脚本或 curl 而不是浏览器。
+加固 loopback 的姿势（3）下 `/demo` 会移到 `bearerAuth` 之后，浏览器开就要带 token 头才能用了 —— 通常配脚本或 curl 而不是浏览器。
 
 ## 3. 全部启动参数
 
-CLI 定义在 **`packages/cli/src/commands/serve.ts:50-147`**：
+CLI 定义在 **`packages/cli/src/commands/serve.ts`**：
 
 | 参数                            | 类型                           | 默认                               | 必填条件                                | 作用                                                                                                                                                 |
 | ------------------------------- | ------------------------------ | ---------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -95,10 +98,14 @@ CLI 定义在 **`packages/cli/src/commands/serve.ts:50-147`**：
 | `QWEN_SERVER_TOKEN`                 | 等价 `--token`；`--token` 优先。boot 时 trim 一次（防 `cat token.txt` 留尾换行）                                                |
 | `QWEN_SERVE_DEBUG`                  | `1` / `true` / `on` / `yes`（不区分大小写）开 stderr 详细日志                                                                   |
 | `QWEN_SERVE_NO_MCP_POOL`            | `1` 完全禁工作区 MCP 池（回到 per-session `McpClientManager`，capabilities 不再广播 `mcp_workspace_pool` / `mcp_pool_restart`） |
+| `QWEN_SERVE_ACP_HTTP`               | `0` 关闭 `/acp` ACP Streamable HTTP transport；默认开启                                                                         |
+| `QWEN_DAEMON_LOG_FILE`              | `0` / `false` / `off` / `no` 关闭结构化 daemon 文件日志                                                                         |
 | `QWEN_SERVE_MCP_CLIENT_BUDGET`      | 等价 `--mcp-client-budget`，daemon 通过 `BridgeOptions.childEnvOverrides` 透传给 ACP 子进程                                     |
 | `QWEN_SERVE_MCP_BUDGET_MODE`        | 等价 `--mcp-budget-mode`，同样透传                                                                                              |
 | `QWEN_SERVE_PROMPT_DEADLINE_MS`     | env fallback for `--prompt-deadline-ms`                                                                                         |
 | `QWEN_SERVE_WRITER_IDLE_TIMEOUT_MS` | env fallback for `--writer-idle-timeout-ms`                                                                                     |
+
+Telemetry env 覆盖（如 `QWEN_TELEMETRY_ENABLED`、`QWEN_TELEMETRY_OTLP_ENDPOINT`、`OTEL_EXPORTER_OTLP_ENDPOINT`、`OTEL_RESOURCE_ATTRIBUTES`）详见 [`17-configuration.md`](./17-configuration.md)。daemon 路径优先级是 env > `settings.json` 的 `telemetry` 段。
 
 per-handle env override 是刻意的 —— 同进程跑两个 daemon 不会在 `process.env` 上 race（`defaultSpawnChannelFactory` 在 spawn 时刻快照 env）。
 
@@ -159,19 +166,31 @@ curl -s http://127.0.0.1:4170/workspace/env | jq
 # 5. MCP 池 / 预算快照
 curl -s http://127.0.0.1:4170/workspace/mcp | jq
 
-# 6. 创建 session
+# 6. hook 配置诊断（不执行 hook）
+curl -s http://127.0.0.1:4170/workspace/hooks | jq
+
+# 7. 创建 session
 curl -s -X POST http://127.0.0.1:4170/session \
   -H 'Content-Type: application/json' \
   -H 'X-Qwen-Client-Id: curl-debug' \
   -d '{}' | jq
 
-# 7. tail SSE（替换 <sid>）
+# 8. session hook / rewind 快照（替换 <sid>）
+curl -s http://127.0.0.1:4170/session/<sid>/hooks | jq
+curl -s http://127.0.0.1:4170/session/<sid>/rewind/snapshots | jq
+
+# 9. tail SSE（替换 <sid>）
 curl -N \
   -H 'Accept: text/event-stream' \
   -H 'X-Qwen-Client-Id: curl-debug' \
   'http://127.0.0.1:4170/session/<sid>/events?lastEventId=0'
 
-# 8. demo 页（浏览器）
+# 10. /acp initialize 烟测（默认开启；QWEN_SERVE_ACP_HTTP=0 时应 404）
+curl -i -s -X POST http://127.0.0.1:4170/acp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"v1"}}'
+
+# 11. demo 页（浏览器）
 open http://127.0.0.1:4170/demo
 ```
 
@@ -179,13 +198,13 @@ open http://127.0.0.1:4170/demo
 
 ## 8. demo 页能不能用
 
-**能。** 实现在 `packages/cli/src/serve/demo.ts:8-12` —— 自包含 HTML，无外部依赖，由 `getDemoHtml(port)` 返回。
+**能。** 实现在 `packages/cli/src/serve/demo.ts` —— 自包含 HTML，无外部依赖，由 `getDemoHtml(port)` 返回。
 
-| 启动姿势                       | `/demo` 注册位置                              | 浏览器直接打                           |
-| ------------------------------ | --------------------------------------------- | -------------------------------------- |
-| loopback + 无 `--require-auth` | `server.ts:611-612`，在 `bearerAuth` **之前** | ✓ 不要 token                           |
-| loopback + `--require-auth`    | `server.ts:625-626`，在 `bearerAuth` **之后** | ✗ 浏览器很难带 Auth 头，用 curl 或 SDK |
-| 非 loopback bind               | `server.ts:625-626`，在 `bearerAuth` **之后** | ✗ 同上                                 |
+| 启动姿势                       | `/demo` 注册位置         | 浏览器直接打                           |
+| ------------------------------ | ------------------------ | -------------------------------------- |
+| loopback + 无 `--require-auth` | 在 `bearerAuth` **之前** | ✓ 不要 token                           |
+| loopback + `--require-auth`    | 在 `bearerAuth` **之后** | ✗ 浏览器很难带 Auth 头，用 curl 或 SDK |
+| 非 loopback bind               | 在 `bearerAuth` **之后** | ✗ 同上                                 |
 
 CSP：`default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'`；加 `X-Frame-Options: DENY` 防被嵌入 iframe。所以页面只能 fetch `'self'`（同 daemon），不能拉外部脚本 / 样式。
 
@@ -195,77 +214,79 @@ CSP：`default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'
 qwen serve
    │
    ▼ (process)
-packages/cli/index.ts:87           main()
+packages/cli/index.ts              main()
    │
    ▼
-gemini.tsx:392                     main() — parseArguments()
+gemini.tsx                         main() — parseArguments()
    │
    ▼ (yargs 装配)
-config/config.ts:62                import { serveCommand } ...
-config/config.ts:1009              .command(serveCommand)
-config/config.ts:1020              await yargsInstance.parse()
+config/config.ts                   import { serveCommand } ...
+config/config.ts                   .command(serveCommand)
+config/config.ts                   await yargsInstance.parse()
    │
    ▼ (handler 触发)
-commands/serve.ts:148              handler(argv) — boot pre-checks
-commands/serve.ts:208              const { runQwenServe } = await import('../serve/index.js')   # lazy load
-commands/serve.ts:210              await runQwenServe({...})
+commands/serve.ts                  handler(argv) — boot pre-checks
+commands/serve.ts                  const { runQwenServe } = await import('../serve/index.js')   # lazy load
+commands/serve.ts                  await runQwenServe({...})
    │
    ▼
-serve/runQwenServe.ts:308          runQwenServe(opts, deps)
-   │  ├─ 312-323  trim token
-   │  ├─ 326-339  hostname 错配兜底
-   │  ├─ 341-360  auth 预检
-   │  ├─ 374-419  workspace 校验 + canonicalize
-   │  ├─ 443-484  MCP budget 校验 + childEnvOverrides
-   │  ├─ 496-530  loadSettings + validatePolicyConfig
-   │  ├─ 542-545  PermissionAuditRing + publisher
-   │  ├─ 555-561  resolveBridgeFsFactory
-   │  └─ 563-678  createAcpSessionBridge({...})
+serve/runQwenServe.ts              runQwenServe(opts, deps)
+   │  ├─ trim token
+   │  ├─ hostname 错配兜底
+   │  ├─ auth 预检
+   │  ├─ workspace 校验 + canonicalize
+   │  ├─ MCP budget 校验 + childEnvOverrides
+   │  ├─ loadSettings + validatePolicyConfig
+   │  ├─ PermissionAuditRing + publisher
+   │  ├─ resolveBridgeFsFactory
+   │  └─ createAcpSessionBridge({...})
    │
    ▼
-serve/runQwenServe.ts:665          const app = createServeApp(opts, () => actualPort, {...})
+serve/runQwenServe.ts              const app = createServeApp(opts, () => actualPort, {...})
    │
    ▼
-serve/server.ts:262                createServeApp() — 构造 Express app（**不监听**）
-   │  ├─ 中间件链（515-617）
-   │  ├─ 路由挂载（641 / 675 / 706 / 753 / 962 / 1785 ...）
+serve/server.ts                    createServeApp() — 构造 Express app（**不监听**）
+   │  ├─ 中间件链
+   │  ├─ 路由挂载
    │  └─ return app
    │
    ▼
-serve/runQwenServe.ts:735          server = app.listen(port, hostname, cb)
-   │  ├─ 758  server.maxConnections = cap
-   │  ├─ 762  actualPort = server.address().port
-   │  ├─ 764  写 "qwen serve listening on ..."
-   │  ├─ 805  注册 SIGINT / SIGTERM (onSignal)
+serve/runQwenServe.ts              server = app.listen(port, hostname, cb)
+   │  ├─ server.maxConnections = cap
+   │  ├─ actualPort = server.address().port
+   │  ├─ 写 "qwen serve listening on ..."
+   │  ├─ 注册 SIGINT / SIGTERM (onSignal)
    │  └─ resolve(handle: RunHandle)
    │
    ▼
-commands/serve.ts:229              await blockForever()    // 永久阻塞，等信号
+commands/serve.ts                  await blockForever()    // 永久阻塞，等信号
 ```
 
 关键事实：
 
 - **`createServeApp` 只构造，不监听。** 它返回的是 `express()` 实例加挂好中间件 + 路由，调用方自己 `app.listen()`。`server.test.ts` 的 ~25 个 case 就是这样用，所以工厂特意不持有生命周期。
-- **`() => actualPort` 是惰性闭包。** `actualPort` 在 `app.listen` 回调里才赋值（line 762），`hostAllowlist` 中间件查询时按需读，所以 ephemeral 端口（`--port 0`）也能正确闸 `Host` 头。
+- **`() => actualPort` 是惰性闭包。** `actualPort` 在 `app.listen` 回调里才赋值，`hostAllowlist` 中间件查询时按需读，所以 ephemeral 端口（`--port 0`）也能正确闸 `Host` 头。
 - **`await blockForever()` 不是 bug**：yargs `parse()` 如果 resolve，CLI 顶层会 fall-through 进交互式 TUI 入口（gemini.tsx）。SIGINT / SIGTERM 在 `runQwenServe` 里走 `onSignal` 路径，是唯一退出方式。
 
 ## 10. HTTP 路由分散在哪些文件
 
-主装配在 `server.ts` 的 `createServeApp()`，对四个模块化路由文件做外挂：
+主装配在 `server.ts` 的 `createServeApp()`，对模块化路由文件做外挂。行号很容易随 daemon_mode_b_main 漂移，排查时优先搜 route 字符串或 mount 函数名。
 
-| 路由                                                                                                               | 文件                                                  | 关键行                                                 |
-| ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------ |
-| `/health`、`/demo`、`/capabilities`、所有 session 路由、device-flow、permission 投票、SSE、单服务器 MCP restart 等 | `packages/cli/src/serve/server.ts`                    | `611 / 641 / 962 / 1208 / 1785 / 1707 / 1631 …`        |
-| `/workspace/memory`（GET/POST）                                                                                    | `packages/cli/src/serve/workspaceMemory.ts`           | `86 / 112`；在 `server.ts:706` 挂载                    |
-| `/workspace/agents` 全套 CRUD                                                                                      | `packages/cli/src/serve/workspaceAgents.ts`           | `107 / 155 / 288 / 315 / 464`；在 `server.ts:713` 挂载 |
-| `GET /file`、`/file/bytes`、`/list`、`/glob`、`/stat`                                                              | `packages/cli/src/serve/routes/workspaceFileRead.ts`  | `519-523`；在 `server.ts:753` 挂载                     |
-| `POST /file/write`、`/file/edit`                                                                                   | `packages/cli/src/serve/routes/workspaceFileWrite.ts` | `286 / 289`；在 `server.ts:756` 挂载                   |
+| 路由 / surface                                                                                                                      | 文件 / 入口                                                     | 定位方式                                                                                        |
+| ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `/health`、`/demo`、`/capabilities`、workspace status、session lifecycle、permission 投票、SSE、session rewind、单服务器 MCP manage | `packages/cli/src/serve/server.ts`                              | 搜 `app.get('/health'`、`app.post('/session'`、`/rewind`、`/session/:id/events` 等 route 字符串 |
+| `/workspace/memory`（GET/POST）                                                                                                     | `packages/cli/src/serve/workspaceMemory.ts`                     | `mountWorkspaceMemoryRoutes(app, ...)`                                                          |
+| `/workspace/agents` 全套 CRUD                                                                                                       | `packages/cli/src/serve/workspaceAgents.ts`                     | `mountWorkspaceAgentsRoutes(app, ...)`                                                          |
+| `GET /file`、`/file/bytes`、`/list`、`/glob`、`/stat`                                                                               | `packages/cli/src/serve/routes/workspaceFileRead.ts`            | `registerWorkspaceFileReadRoutes(app, ...)`                                                     |
+| `POST /file/write`、`/file/edit`                                                                                                    | `packages/cli/src/serve/routes/workspaceFileWrite.ts`           | `registerWorkspaceFileWriteRoutes(app, ...)`                                                    |
+| `/acp` ACP Streamable HTTP（POST initialize / POST async request / GET SSE / DELETE）                                               | `packages/cli/src/serve/acpHttp/index.ts`                       | `mountAcpHttp(app, bridge, ...)`                                                                |
+| workspace facade（MCP / hooks / preflight / tool toggle / init / MCP restart 等）                                                   | `packages/cli/src/serve/workspace-service/index.ts`、`types.ts` | `createDaemonWorkspaceService(...)`                                                             |
 
 完整路由 + wire 协议看 [`../qwen-serve-protocol.md`](../qwen-serve-protocol.md)；架构看 [`01-architecture.md`](./01-architecture.md)。
 
 ## 11. 优雅退出 vs 强退
 
-- **第一次 SIGINT / SIGTERM** → 走 `onSignal`（`runQwenServe.ts:805`） → 两阶段 graceful：
+- **第一次 SIGINT / SIGTERM** → 走 `onSignal` → 两阶段 graceful：
   1. `bridge.shutdown()`：每个 channel 等 `KILL_HARD_DEADLINE_MS`（10s），然后 `channel.kill()`。
   2. `server.close()`：等飞行中请求收尾，5s `SHUTDOWN_FORCE_CLOSE_MS` 到点 `closeAllConnections()`，再 2s 二次 deadline。
 - **第二次 SIGINT / SIGTERM** 在退出中再来 → `bridge.killAllSync()` 同步 SIGKILL 所有 ACP child + `process.exit(1)`（防孤儿）。
@@ -312,7 +333,7 @@ const server = app.listen(0, '127.0.0.1', () => {
 });
 ```
 
-注意：直接调 `createServeApp` 时默认 `fsFactory.trusted = false`，agent 侧 ACP `writeTextFile` 会拒为 `untrusted_workspace`，且首次会打一次 stderr 警告（`server.ts:328-335`）。要么注入 `deps.fsFactory`（带显式 trust），要么注入 `deps.bridge`，要么接受这个 trust-gate-default 姿势。
+注意：直接调 `createServeApp` 时默认 `fsFactory.trusted = false`，agent 侧 ACP `writeTextFile` 会拒为 `untrusted_workspace`，且首次会打一次 stderr 警告。要么注入 `deps.fsFactory`（带显式 trust），要么注入 `deps.bridge`，要么接受这个 trust-gate-default 姿势。
 
 ## 13. 调试套路
 
@@ -338,10 +359,10 @@ QWEN_SERVE_DEBUG=1 qwen serve
 
 ## 参考
 
-- CLI 入口：`packages/cli/src/commands/serve.ts:46-232`
-- bootstrap：`packages/cli/src/serve/runQwenServe.ts:308-940`
-- Express 工厂：`packages/cli/src/serve/server.ts:262-1900`
-- 中间件：`packages/cli/src/serve/auth.ts:1-294`
+- CLI 入口：`packages/cli/src/commands/serve.ts`
+- bootstrap：`packages/cli/src/serve/runQwenServe.ts`
+- Express 工厂：`packages/cli/src/serve/server.ts`
+- 中间件：`packages/cli/src/serve/auth.ts`
 - bridge 工厂：`packages/acp-bridge/src/bridge.ts:350+`
 - demo 页 HTML：`packages/cli/src/serve/demo.ts:8+`
 - 用户文档：[`../../users/qwen-serve.md`](../../users/qwen-serve.md)

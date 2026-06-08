@@ -199,6 +199,18 @@ spawn 拥有者的 HTTP 响应写不出去时（TCP 在握手中途 reset），�
 
 `GET /session/:id/tasks` —— 返回 session 的后台任务快照：agent 任务、shell 任务、monitor 任务及其生命周期状态。
 
+### Session Hooks（`session_hooks` 能力 tag）
+
+`GET /session/:id/hooks` —— 返回该 session 当前可见的 hook 配置快照。它是只读诊断路由，不执行 hook，也不改变 hook enable 状态。响应形状是 `ServeSessionHooksStatus`：`{ v, sessionId, workspaceCwd, disabled, hooks, errors? }`。`hooks[]` 里的条目保留 `eventName`、`source`（含 `session`）、`matcher`、`sequential`、`enabled`、`hookId` / `skillRoot` 等元数据，供 UI 或排障工具解释“这个 session 为什么会跑这些 hook”。
+
+### Session Rewind（`session_rewind` 能力 tag）
+
+`GET /session/:id/rewind/snapshots` —— 列出可回退的 turn 快照，返回 `{ snapshots: [{ promptId, turnIndex, timestamp, diffStats }] }`。`diffStats` 只给数量级信息：`filesChanged`、`insertions`、`deletions`。
+
+`POST /session/:id/rewind` —— strict mutation gate 路由，body 为 `{ promptId }`。bridge 通过 ACP extMethod `qwen/control/session/rewind` 回退会话历史，并尽力恢复文件快照。成功响应 `{ rewound, targetTurnIndex, filesChanged, filesFailed }`；`rewound=false` 表示会话历史已回退，但至少有文件恢复失败，调用方需要把 `filesFailed` 展示给用户。成功后广播 `session_rewound` 事件，事件 payload 额外带 `sessionId` 与 `promptId`，peer 客户端可据此刷新 transcript。
+
+错误边界：未知 / 已压缩的 `promptId` 映射为 `InvalidRewindTargetError`（HTTP 400）；session 正在跑 prompt 时映射为 `SessionBusyError`；缺失或空 `promptId` 直接返回 `400 { code: 'missing_prompt_id' }`。
+
 ### Compacted Replay
 
 `POST /session/:id/load` 返回的 `BridgeRestoredSession` 现在包含 `compactedReplay?: BridgeEvent[]`、`liveJournal?: BridgeEvent[]`、`lastEventId?: number`。`compactedReplay` 由 `TurnBoundaryCompactionEngine` 生成：在 turn 边界折叠连续文本/思考块、工具调用序列折到最终状态、丢弃瞬态信号，产出 O(turns) 而非 O(tokens) 量级的重放日志（通常 25-30x 压缩）。
@@ -213,7 +225,7 @@ spawn 拥有者的 HTTP 响应写不出去时（TCP 在握手中途 reset），�
 - `BridgeOptions.sessionScope`（默认 `'single'`，可选 `'thread'`）。
 - `BridgeOptions.initializeTimeoutMs`（默认 10s）。
 - `BridgeOptions.channelIdleTimeoutMs`（默认 0，= 立即回收 ACP child）。
-- 能力 tag：`session_create`、`session_scope_override`、`session_load`、`unstable_session_resume`、`session_list`、`session_close`、`session_metadata`、`session_set_model`、`client_identity`、`client_heartbeat`、`session_recap`、`session_btw`、`session_context_usage`、`session_tasks`、`session_stats`、`non_blocking_prompt`。
+- 能力 tag：`session_create`、`session_scope_override`、`session_load`、`unstable_session_resume`、`session_list`、`session_close`、`session_metadata`、`session_set_model`、`client_identity`、`client_heartbeat`、`session_recap`、`session_btw`、`session_context_usage`、`session_supported_commands`、`session_tasks`、`session_stats`、`session_hooks`、`session_rewind`、`non_blocking_prompt`。
 
 ## 注意 & 已知局限
 
@@ -227,5 +239,5 @@ spawn 拥有者的 HTTP 响应写不出去时（TCP 在握手中途 reset），�
 - `packages/acp-bridge/src/bridge.ts:183-285`（SessionEntry 定义）
 - `packages/acp-bridge/src/bridgeTypes.ts:30-180+`（`AcpSessionBridge`、`BridgeSession`、`BridgeSessionState`）
 - `packages/sdk-typescript/src/daemon/types.ts:113+`（`DaemonSession`）
-- `packages/sdk-typescript/src/daemon/DaemonSessionClient.ts:61-385`
+- `packages/sdk-typescript/src/daemon/DaemonSessionClient.ts`
 - Wire 参考：[`../qwen-serve-protocol.md`](../qwen-serve-protocol.md)。

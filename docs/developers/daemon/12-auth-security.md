@@ -120,7 +120,7 @@ per-route opt-in 闸门。行为矩阵：
 
 `code: 'token_required'` 与 `bearerAuth` 普通 `Unauthorized` 不同形状，SDK 据此渲染「请用 --token / --require-auth 启动 daemon」提示而不是泛 401。
 
-**Wave 4+ strict 路由**：`/workspace/memory`、`/workspace/agents/*`、`/workspace/agents/generate`、`/workspace/agents/:agentType`（POST/DELETE）、`/file/write`、`/file/edit`、`/workspace/tools/:name/enable`、`/workspace/mcp/:server/restart`、`/workspace/mcp/:server/{enable,disable,authenticate,clear-auth}`、`/workspace/mcp/servers`（POST/DELETE）、`/workspace/auth/device-flow`（POST/GET/DELETE 含 `/:id`）、`/workspace/init`、`/session/:id/approval-mode`。
+**Wave 4+ strict 路由**：`/workspace/memory`、`/workspace/agents/*`、`/workspace/agents/generate`、`/workspace/agents/:agentType`（POST/DELETE）、`/file/write`、`/file/edit`、`/workspace/tools/:name/enable`、`/workspace/mcp/:server/restart`、`/workspace/mcp/:server/{enable,disable,authenticate,clear-auth}`、`/workspace/mcp/servers`（POST/DELETE）、`/workspace/auth/device-flow`（POST/GET/DELETE 含 `/:id`）、`/workspace/init`、`/session/:id/approval-mode`、`/session/:id/rewind`。
 
 ### `/health` 豁免
 
@@ -138,7 +138,7 @@ daemon 只校验 `X-Qwen-Client-Id` 的格式（`[A-Za-z0-9._:-]{1,128}`）并�
 
 provider 认证（Qwen OAuth 等）的独立 OAuth surface：
 
-- `POST /workspace/auth/device-flow` — 启动一个流；返回 `{deviceFlowId, providerId, expiresAt, verificationUrl, userCode}`。
+- `POST /workspace/auth/device-flow` — 启动一个流；返回 `{deviceFlowId, providerId, expiresAt, verificationUri, userCode}`。
 - `GET /workspace/auth/device-flow/:id` — 轮询状态。
 - `DELETE /workspace/auth/device-flow/:id` — 取消。
 - `GET /workspace/auth/status` — 当前账号 / provider 快照。

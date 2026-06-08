@@ -4,7 +4,7 @@
 
 `packages/channels/` 是 **IM 渠道适配器**，把聊天平台的入站消息翻成 daemon prompt，把 daemon 的出站事件翻回平台消息。现已落地四个具体渠道：钉钉、飞书（Feishu/Lark）、微信（Weixin）、Telegram。它们共享 `packages/channels/base/` 基座加 `DaemonChannelBridge` —— 后者做 session 多路复用 + SSE 消费。
 
-每个渠道按可配的 `SessionScope`（`per-sender` / `per-group` 等）把一段会话（或一群）映射到一个 daemon session。适配器委托给 `DaemonChannelBridge`，bridge 委托给 SDK 的 `DaemonSessionClient`（见 [`13-sdk-daemon-client.md`](./13-sdk-daemon-client.md)）。
+每个渠道按可配的 `SessionScope`（`user` / `thread` / `single`）把一段会话（或一群）映射到一个 daemon session。适配器委托给 `DaemonChannelBridge`，bridge 委托给 SDK 的 `DaemonSessionClient`（见 [`13-sdk-daemon-client.md`](./13-sdk-daemon-client.md)）。
 
 ## 职责
 
@@ -20,12 +20,22 @@
 
 ```ts
 class DaemonChannelBridge extends EventEmitter {
-  constructor(opts: {
-    sessionFactory: DaemonChannelSessionFactory;
-    config: ChannelConfig;
-  });
-  handleInbound(envelope: Envelope): Promise<void>;
-  shutdown(): Promise<void>;
+  constructor(opts: DaemonChannelBridgeOptions);
+  // DaemonChannelBridgeOptions: { cwd, sessionFactory, modelServiceId?, sessionScope? }
+  start(): Promise<void>;
+  newSession(cwd: string): Promise<DaemonChannelSessionClient>;
+  loadSession(
+    sessionId: string,
+    cwd: string,
+  ): Promise<DaemonChannelSessionClient>;
+  prompt(sessionId: string, text: string, options?): Promise<PromptResult>;
+  cancelSession(sessionId: string): Promise<void>;
+  setSessionModel(
+    sessionId: string,
+    modelId: string,
+  ): Promise<Record<string, unknown>>;
+  respondToPermission(requestId: string, response): Promise<boolean>;
+  stop(): void;
 }
 ```
 
@@ -36,7 +46,7 @@ class DaemonChannelBridge extends EventEmitter {
 - debounce 的 prompt 组装器（适配把用户输入拆成多条入站消息的平台）。
 - 每请求的自动批准策略。
 
-发的事件：`permissionRequest`、`permissionResolved`、`textChunk`、`thoughtChunk`、`toolCall`、`promptComplete`、`sessionUpdate`、`modelSwitched`、`modelSwitchFailed`、`error`。渠道适配器把它们接到平台原生 API。
+发的事件：`permissionRequest`、`permissionResolved`、`textChunk`、`thoughtChunk`、`toolCall`、`promptComplete`、`sessionUpdate`、`modelSwitched`、`modelSwitchFailed`、`sessionDied`、`error`。渠道适配器把它们接到平台原生 API。
 
 ### `ChannelBase`（`packages/channels/base/src/ChannelBase.ts`）
 
@@ -44,14 +54,19 @@ class DaemonChannelBridge extends EventEmitter {
 
 ```ts
 abstract class ChannelBase {
-  abstract start(): Promise<void>;
-  abstract sendOutbound(target, payload): Promise<void>;
-  handleInbound(envelope: Envelope): Promise<void>; // → bridge.handleInbound
-  shutdown(): Promise<void>;
+  constructor(
+    name,
+    config: ChannelConfig,
+    bridge: AcpBridge,
+    options?: ChannelBaseOptions,
+  );
+  abstract connect(): Promise<void>;
+  abstract sendMessage(chatId: string, text: string): Promise<void>;
+  abstract disconnect(): void;
 }
 ```
 
-承担共性：sender / group gating、块流式发送（块大小、节流）、入站去抖。
+承担共性：sender / group gating（`SenderGate` + `GroupGate`）、块流式发送（`BlockStreamer`）、session 路由（`SessionRouter`）、dispatch 模式（collect / steer / followup）。
 
 ### 各渠道适配器
 
@@ -156,16 +171,27 @@ sequenceDiagram
 
 ## 配置
 
-`ChannelConfig`（`packages/channels/base/src/types.ts:1-121`）：
+`ChannelConfig`（`packages/channels/base/src/types.ts`）：
 
-| 旋钮                                     | 效果                                                      |
-| ---------------------------------------- | --------------------------------------------------------- |
-| `sessionScope`                           | `'per-sender'`、`'per-group'`、`'per-thread'`（渠道定义） |
-| `approvalMode`                           | `'auto'`（自动应答） / `'prompt'`（渲染 UI）              |
-| `allowlist?: string[]`                   | 允许的 sender id，缺省 = 开放                             |
-| `denylist?: string[]`                    | 拒绝的 sender id                                          |
-| `chunkSize`、`chunkIntervalMs`           | 出站块流参数                                              |
-| `daemon: { baseUrl, token?, clientId? }` | 传给 `DaemonChannelSessionFactory`                        |
+| 旋钮                                                    | 效果                                                  |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| `type: ChannelType`                                     | 渠道类型标识（`'telegram'`、`'dingtalk'` 等）         |
+| `token: string`                                         | 渠道认证 token                                        |
+| `clientId?: string`                                     | 可选 client id                                        |
+| `clientSecret?: string`                                 | 可选 client secret                                    |
+| `sessionScope: SessionScope`                            | `'user'`、`'thread'`、`'single'`                      |
+| `senderPolicy: SenderPolicy`                            | `'allowlist'` / `'pairing'` / `'open'`                |
+| `allowedUsers: string[]`                                | 允许的 sender id（`senderPolicy='allowlist'` 时使用） |
+| `cwd: string`                                           | 工作目录                                              |
+| `approvalMode?: string`                                 | `'auto'`（自动应答） / `'prompt'`（渲染 UI）          |
+| `instructions?: string`                                 | 自定义系统指令                                        |
+| `model?: string`                                        | 模型 ID 覆盖                                          |
+| `groupPolicy: GroupPolicy`                              | `'disabled'` / `'allowlist'` / `'open'`               |
+| `groups: Record<string, GroupConfig>`                   | 群组配置（`'*'` 为默认值）                            |
+| `dispatchMode?: DispatchMode`                           | `'collect'` / `'steer'` / `'followup'`                |
+| `blockStreaming?: 'on' \| 'off'`                        | 启用块流式发送                                        |
+| `blockStreamingChunk?: BlockStreamingChunkConfig`       | 出站块大小参数（minChars / maxChars）                 |
+| `blockStreamingCoalesce?: BlockStreamingCoalesceConfig` | 空闲合并参数（idleMs）                                |
 
 每渠道还有自己的 key（钉钉：`streamCredentials`；微信：`ilinkUrl`、`botId`；Telegram：`botToken`）。
 

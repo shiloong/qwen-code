@@ -40,7 +40,7 @@
 - [`06-mcp-budget-guardrails.md`](./06-mcp-budget-guardrails.md) — `WorkspaceMcpBudget`、模式（off/warn/enforce）、滞回阈值、批量拒绝合并。
 - [`07-workspace-filesystem.md`](./07-workspace-filesystem.md) — `WorkspaceFileSystem` 沙箱、路径策略、审计、`BridgeFileSystem` 契约。
 - [`08-session-lifecycle.md`](./08-session-lifecycle.md) — 创建 / 附加 / 载入 / 恢复、`X-Qwen-Client-Id`、心跳、剔除、元数据。
-- [`09-event-schema.md`](./09-event-schema.md) — Typed Event Schema v1：38 种已知事件、payload、reducer、向前兼容。
+- [`09-event-schema.md`](./09-event-schema.md) — Typed Event Schema v1：39 种已知事件、payload、reducer、向前兼容。
 - [`10-event-bus.md`](./10-event-bus.md) — `EventBus`、单调 ID、环形缓冲重放、`Last-Event-ID`、慢消费者反压、`client_evicted`。
 - [`11-capabilities-versioning.md`](./11-capabilities-versioning.md) — 能力注册表、协议版本、Schema 版本、条件广播。
 - [`12-auth-security.md`](./12-auth-security.md) — Bearer 中间件、Host 白名单、CORS 拒绝、Mutation Gate、`--require-auth`、`/health` 豁免、Device Flow。
@@ -109,7 +109,7 @@
 
 | Surface                                                                                                                                                          | 实现位置                                                                                                                       | 文档落点                                                           |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| Typed event schema v1（38 种已知 event type，含 `state_resync_required` 同步恢复帧、SDK reducer `awaitingResync` 状态机、`RESYNC_PASSTHROUGH_TYPES` 终态白名单） | `packages/sdk-typescript/src/daemon/events.ts`                                                                                 | [`09-event-schema.md`](./09-event-schema.md)                       |
+| Typed event schema v1（39 种已知 event type，含 `state_resync_required` 同步恢复帧、SDK reducer `awaitingResync` 状态机、`RESYNC_PASSTHROUGH_TYPES` 终态白名单） | `packages/sdk-typescript/src/daemon/events.ts`                                                                                 | [`09-event-schema.md`](./09-event-schema.md)                       |
 | Envelope 级元数据：每帧 `_meta.serverTimestamp`（多客户端时钟一致性）、`tool_call.provenance` + `serverId`（在 `data._meta`）                                    | `packages/cli/src/serve/server.ts` 的 `formatSseFrame`、`packages/cli/src/acp-integration/session/emitters/ToolCallEmitter.ts` | [`09-event-schema.md`](./09-event-schema.md)                       |
 | SSE event bus：单调 ID、环形缓冲重放、`Last-Event-ID`、慢消费者反压、环驱逐 → `state_resync_required` 恢复路径                                                   | `packages/acp-bridge/src/eventBus.ts`                                                                                          | [`10-event-bus.md`](./10-event-bus.md)                             |
 | 能力协商：注册表、协议版本、条件广播                                                                                                                             | `packages/cli/src/serve/capabilities.ts`                                                                                       | [`11-capabilities-versioning.md`](./11-capabilities-versioning.md) |

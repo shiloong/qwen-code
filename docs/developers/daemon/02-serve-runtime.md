@@ -16,11 +16,11 @@
 
 ## 架构
 
-**入口**：`runQwenServe(opts, deps)`，文件 `packages/cli/src/serve/runQwenServe.ts:308-994`，返回 `RunHandle`（`{ url, port, close, ... }`）。
+**入口**：`runQwenServe(opts, deps)`，文件 `packages/cli/src/serve/runQwenServe.ts`，返回 `RunHandle`（`{ url, port, close, ... }`）。
 
-**应用工厂**：`createServeApp(opts, getPort, deps)`，文件 `packages/cli/src/serve/server.ts:261-339`，构建 Express `Application`。直接嵌入和测试不走 bootstrap，直接调它。
+**应用工厂**：`createServeApp(opts, getPort, deps)`，文件 `packages/cli/src/serve/server.ts`，构建 Express `Application`。直接嵌入和测试不走 bootstrap，直接调它。
 
-**能力注册表**：`SERVE_CAPABILITY_REGISTRY`，文件 `packages/cli/src/serve/capabilities.ts:37-215`。每个 tag 带 `since` 版本和可选 `modes`，条件 tag（`require_auth`、`mcp_workspace_pool`、`mcp_pool_restart`）在开关关掉时不广播。详见 [`11-capabilities-versioning.md`](./11-capabilities-versioning.md)。
+**能力注册表**：`SERVE_CAPABILITY_REGISTRY`，文件 `packages/cli/src/serve/capabilities.ts`。每个 tag 带 `since` 版本和可选 `modes`，条件 tag（`require_auth`、`mcp_workspace_pool`、`mcp_pool_restart`）在开关关掉时不广播。详见 [`11-capabilities-versioning.md`](./11-capabilities-versioning.md)。
 
 **中间件** `packages/cli/src/serve/auth.ts`：
 
@@ -42,14 +42,24 @@
 | `serve/routes/workspaceFileRead.ts`、`workspaceFileWrite.ts` | `GET /file`、`GET /file/bytes`、`POST /file/write`、`POST /file/edit` 的 HTTP handler                                                                                                                                                                                                                                                                                                                                                                                |
 | `serve/workspaceMemory.ts`                                   | `GET/POST /workspace/memory`（QWEN.md CRUD）                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `serve/workspaceAgents.ts`                                   | `GET/POST/DELETE /workspace/agents`（子 agent CRUD）                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `serve/daemonStatusProvider.ts:41-287`                       | env 快照 + daemon-host preflight cell（Node 版本、CLI 入口、workspace stat、ripgrep、git、npm）                                                                                                                                                                                                                                                                                                                                                                      |
-| `serve/permissionAudit.ts:1-60`                              | `PermissionAuditRing`（FIFO 512 条）+ `createPermissionAuditPublisher`                                                                                                                                                                                                                                                                                                                                                                                               |
+| `serve/daemonStatusProvider.ts`                              | env 快照 + daemon-host preflight cell（Node 版本、CLI 入口、workspace stat、ripgrep、git、npm）                                                                                                                                                                                                                                                                                                                                                                      |
+| `serve/permissionAudit.ts`                                   | `PermissionAuditRing`（FIFO 512 条）+ `createPermissionAuditPublisher`                                                                                                                                                                                                                                                                                                                                                                                               |
 | `serve/auth/deviceFlow.ts`、`qwenDeviceFlowProvider.ts`      | Device Flow OAuth 路由（见 [`12-auth-security.md`](./12-auth-security.md)）                                                                                                                                                                                                                                                                                                                                                                                          |
 | `serve/daemonLogger.ts`                                      | `DaemonLogger` 结构化文件日志（详见 [`19-observability.md`](./19-observability.md)）                                                                                                                                                                                                                                                                                                                                                                                 |
 | `serve/debugMode.ts`                                         | `isServeDebugMode()` 公用谓词，控制是否在 HTTP 响应体中包含 verbose 错误上下文                                                                                                                                                                                                                                                                                                                                                                                       |
 | `serve/workspace-service/`                                   | `DaemonWorkspaceService` facade（`index.ts` + `types.ts`）。workspace 级状态查询（MCP / skills / providers / env / preflight / tools）和修改（tool toggle / init / MCP restart / MCP add-remove / MCP manage）从路由层委托给此 facade，每个方法接受 `WorkspaceRequestContext`（audit 关联、客户端身份、路由元数据）                                                                                                                                                  |
 | `serve/acpHttp/`                                             | ACP Streamable HTTP transport（RFD #721），挂载在 `/acp`。8 个文件（5 source + 3 test）实现 JSON-RPC POST、SSE GET、DELETE teardown，共享 bridge，与 REST surface 并行                                                                                                                                                                                                                                                                                               |
 | `serve/demo.ts`                                              | `GET /demo` 的自包含内联 HTML —— 一个浏览器可访问的调试控制台（聊天 UI + 事件日志 + workspace 检视器）。loopback 且不带 `--require-auth` 时注册在 `bearerAuth` **之前**，开发不带 token 就能从浏览器打开；非 loopback 或带 `--require-auth` 时注册在 `bearerAuth` **之后**，未认证探测不能枚举接口。Strict CSP（`default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'`）+ `X-Frame-Options: DENY`。 |
+
+**ACP Streamable HTTP (`/acp`)**：这是与 REST `/session/*` 并行的官方 ACP-over-HTTP transport，不是 REST protocol 的替代。wire 形态是单 endpoint：
+
+- `POST /acp` with `initialize` → inline `200` JSON-RPC result，并返回 `Acp-Connection-Id`。
+- `POST /acp` with 非 initialize request / response / notification → `202`，异步结果从 SSE 流返回。
+- `GET /acp` + `Acp-Connection-Id` → connection-scoped SSE。
+- `GET /acp` + `Acp-Connection-Id` + `Acp-Session-Id` → session-scoped SSE；只允许读取本 connection 拥有的 session。
+- `DELETE /acp` → `202`，释放 connection、owned sessions、pending permission。
+
+默认开启；`QWEN_SERVE_ACP_HTTP=0` 会跳过挂载，保留 REST surface。认证、Host allowlist、CORS 与 mutation gate 仍走 `server.ts` 中同一套 Express 中间件顺序。
 
 **Re-export shim**（为兼容 F1 前的 import 路径）：
 
@@ -69,7 +79,7 @@
 6. **MCP 预算校验**：必须正整数；`enforce` 必须配 budget。
 7. **MCP pool 开关推断**：父进程 env 里 `QWEN_SERVE_NO_MCP_POOL=1` 时，`mcpPoolActive` 默认 `false`，capabilities 也会诚实地不广播 `mcp_workspace_pool` + `mcp_pool_restart`。
 8. **per-handle `childEnvOverrides`**：把 `QWEN_SERVE_MCP_CLIENT_BUDGET` 和 `QWEN_SERVE_MCP_BUDGET_MODE` 通过 `BridgeOptions.childEnvOverrides` 传给 ACP 子进程，**不**改 `process.env`（同进程跑两个 daemon 会出 race）。
-9. **boot 一次 `settings.json`**：取 `context.fileName`、`policy.permissionStrategy`、`policy.consensusQuorum`；损坏文件 try/catch 走默认值。之后 **`validatePolicyConfig()`**（`runQwenServe.ts:89+`）解析 `policy.*`，未知 strategy（按 `SERVE_CAPABILITY_REGISTRY.permission_mediation.modes` 单一事实源校验）或非正整数 `consensusQuorum` 时抛 `InvalidPolicyConfigError`。`consensusQuorum` 设了但策略非 `consensus` 时打 stderr 警告（默认会被静默忽略，浮出来防 operator 误以为它生效）。settings 读 I/O 失败回退默认；`InvalidPolicyConfigError` 重抛让 boot 显式失败。
+9. **boot 一次 `settings.json`**：取 `context.fileName`、`policy.permissionStrategy`、`policy.consensusQuorum`；损坏文件 try/catch 走默认值。之后 **`validatePolicyConfig()`**（`runQwenServe.ts`）解析 `policy.*`，未知 strategy（按 `SERVE_CAPABILITY_REGISTRY.permission_mediation.modes` 单一事实源校验）或非正整数 `consensusQuorum` 时抛 `InvalidPolicyConfigError`。`consensusQuorum` 设了但策略非 `consensus` 时打 stderr 警告（默认会被静默忽略，浮出来防 operator 误以为它生效）。settings 读 I/O 失败回退默认；`InvalidPolicyConfigError` 重抛让 boot 显式失败。
 10. **分配 `PermissionAuditRing`**（512 条）。
 11. **建 `fsFactory`**：`runQwenServe` 路径默认 `trusted: true`；`createServeApp` 直接调时默认 `trusted: false` 并发警告一次。
 12. **`createAcpSessionBridge`**，见 [`03-acp-bridge.md`](./03-acp-bridge.md)。
@@ -136,11 +146,11 @@
 
 ## 参考
 
-- `packages/cli/src/serve/runQwenServe.ts:308-994`
-- `packages/cli/src/serve/server.ts:261-339`
-- `packages/cli/src/serve/auth.ts:1-294`
-- `packages/cli/src/serve/capabilities.ts:1-220`
-- `packages/cli/src/serve/types.ts:37-155`（`ServeOptions`、`CapabilitiesEnvelope`）
-- `packages/cli/src/serve/daemonStatusProvider.ts:41-287`
-- `packages/cli/src/serve/permissionAudit.ts:1-60`
+- `packages/cli/src/serve/runQwenServe.ts`
+- `packages/cli/src/serve/server.ts`
+- `packages/cli/src/serve/auth.ts`
+- `packages/cli/src/serve/capabilities.ts`
+- `packages/cli/src/serve/types.ts`（`ServeOptions`、`CapabilitiesEnvelope`）
+- `packages/cli/src/serve/daemonStatusProvider.ts`
+- `packages/cli/src/serve/permissionAudit.ts`
 - Issue：[#3803](https://github.com/QwenLM/qwen-code/issues/3803)、[#4175](https://github.com/QwenLM/qwen-code/issues/4175)。

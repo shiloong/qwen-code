@@ -34,8 +34,29 @@
 | `QWEN_SERVER_TOKEN`                 | Bearer token，boot 时 trim                                                                                                                |
 | `QWEN_SERVE_DEBUG`                  | `1` / `true` / `on` / `yes`（不区分大小写）开启详细 stderr（见 [`19-observability.md`](./19-observability.md)）                           |
 | `QWEN_SERVE_NO_MCP_POOL`            | `1` 禁 workspace MCP transport 池（回到 per-session `McpClientManager`；capabilities 不再广播 `mcp_workspace_pool` / `mcp_pool_restart`） |
+| `QWEN_SERVE_ACP_HTTP`               | `0` 关闭 `/acp` ACP Streamable HTTP transport；未设或其他值默认开启                                                                       |
+| `QWEN_DAEMON_LOG_FILE`              | `0` / `false` / `off` / `no` 关闭 `DaemonLogger` 结构化文件日志；boot stderr 会显示 `(disabled)`                                          |
 | `QWEN_SERVE_PROMPT_DEADLINE_MS`     | env fallback for `--prompt-deadline-ms`                                                                                                   |
 | `QWEN_SERVE_WRITER_IDLE_TIMEOUT_MS` | env fallback for `--writer-idle-timeout-ms`                                                                                               |
+
+### Telemetry env 覆盖
+
+`qwen serve` boot 时调用 `resolveTelemetrySettings({ env: process.env, settings: settings.telemetry })`；serve 子命令没有单独的 telemetry flag，所以 daemon 路径的优先级是 **env > `settings.json`**。标准 OTEL env 只在没有对应 `QWEN_TELEMETRY_*` 时作为 fallback。
+
+| Env                                                                            | 作用                                                                         |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `QWEN_TELEMETRY_ENABLED`                                                       | 覆盖 `telemetry.enabled`                                                     |
+| `QWEN_TELEMETRY_TARGET`                                                        | 覆盖 `telemetry.target`（`local` / `gcp`）                                   |
+| `QWEN_TELEMETRY_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT`                 | OTLP base endpoint                                                           |
+| `QWEN_TELEMETRY_OTLP_PROTOCOL`                                                 | `grpc` / `http`                                                              |
+| `QWEN_TELEMETRY_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`   | traces per-signal endpoint                                                   |
+| `QWEN_TELEMETRY_OTLP_LOGS_ENDPOINT` / `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`       | logs per-signal endpoint                                                     |
+| `QWEN_TELEMETRY_OTLP_METRICS_ENDPOINT` / `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | metrics per-signal endpoint                                                  |
+| `QWEN_TELEMETRY_OUTFILE`                                                       | file exporter 输出路径；设置后不走 OTLP exporter                             |
+| `QWEN_TELEMETRY_LOG_PROMPTS`                                                   | 控制 prompt 内容是否进入 telemetry log                                       |
+| `QWEN_TELEMETRY_INCLUDE_SENSITIVE_SPAN_ATTRIBUTES`                             | 是否把敏感 span attributes 写入 telemetry                                    |
+| `QWEN_TELEMETRY_METRICS_INCLUDE_SESSION_ID`                                    | 是否在 daemon metrics 上带高基数 `session.id`                                |
+| `OTEL_RESOURCE_ATTRIBUTES` / `OTEL_SERVICE_NAME`                               | resource attributes；保留键会被剥离，`OTEL_SERVICE_NAME` 覆盖 `service.name` |
 
 ### 通过 `BridgeOptions.childEnvOverrides` 转发给 ACP child
 
@@ -112,7 +133,7 @@ daemon boot 时读一次（`runQwenServe.ts:496+`）：`loadSettings(boundWorksp
 | `DEFAULT_PERMISSION_TIMEOUT_MS`   | `bridge.ts`                | `5 * 60_000`      | 每权限请求 wallclock                                     |
 | `DEFAULT_MAX_PENDING_PER_SESSION` | `bridge.ts`                | `64`              | 对齐 `DEFAULT_MAX_SUBSCRIBERS`                           |
 | `MAX_RESOLVED_PERMISSION_RECORDS` | `permissionMediator.ts:77` | `512`             | 近期已 resolved 权限的 FIFO                              |
-| `KILL_HARD_DEADLINE_MS`           | `bridge.ts`                | `10_000`          | per-channel graceful 关闭窗口                            |
+| `KILL_HARD_DEADLINE_MS`           | `spawnChannel.ts`          | `10_000`          | per-channel graceful 关闭窗口                            |
 | `SHUTDOWN_FORCE_CLOSE_MS`         | `runQwenServe.ts`          | `5_000`           | HTTP server 强关定时器                                   |
 | `MAX_READ_BYTES`                  | `fs/policy.ts:33`          | `256 * 1024`      | 读上限                                                   |
 | `MAX_WRITE_BYTES`                 | `fs/policy.ts:42`          | `5 * 1024 * 1024` | 写上限                                                   |

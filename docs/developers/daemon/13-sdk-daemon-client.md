@@ -29,7 +29,7 @@
 
 ## 架构
 
-### `DaemonClient`（`DaemonClient.ts:209-1506`）
+### `DaemonClient`（`DaemonClient.ts`）
 
 构造：
 
@@ -44,17 +44,17 @@ new DaemonClient({
 
 方法分组（每个方法可选 `clientId` 用于盖 `X-Qwen-Client-Id`）：
 
-| 组             | 方法                                                                                                                                                                                                                                                                                                                        |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Plumbing       | `health()`、`capabilities()`、`auth`（lazy `DaemonAuthFlow` accessor）                                                                                                                                                                                                                                                      |
-| Sessions       | `createOrAttachSession`、`loadSession`、`resumeSession`、`listWorkspaceSessions`、`closeSession`、`updateSessionMetadata`、`sessionContext`、`sessionContextUsage`、`sessionSupportedCommands`、`sessionTasks`、`sessionStats`、`setSessionApprovalMode`、`setSessionModel`、`deleteSessionsData`                           |
-| Prompting      | `prompt`、`promptNonBlocking`、`cancel`、`heartbeat`、`recapSession`、`btwSession`、`shellCommand`                                                                                                                                                                                                                          |
-| Events         | `subscribeEvents`（SSE `AsyncIterable<DaemonEvent>` 生成器）                                                                                                                                                                                                                                                                |
-| Permissions    | `respondToPermission`、`respondToSessionPermission`                                                                                                                                                                                                                                                                         |
-| Workspace 快照 | `workspaceMcp`、`workspaceSkills`、`workspaceProviders`、`workspaceEnv`、`workspacePreflight`、`workspaceTools`、`workspaceMcpTools`                                                                                                                                                                                        |
-| Workspace 修改 | `writeWorkspaceMemory`、`workspaceMemory`、`listWorkspaceAgents`、`getWorkspaceAgent`、`createWorkspaceAgent`、`updateWorkspaceAgent`、`deleteWorkspaceAgent`、`generateWorkspaceAgent`、`setWorkspaceToolEnabled`、`restartMcpServer`、`initWorkspace`、`addRuntimeMcpServer`、`removeRuntimeMcpServer`、`manageMcpServer` |
-| Files          | `readWorkspaceFile`、`readWorkspaceFileBytes`、`writeWorkspaceFile`、`editWorkspaceFile`、`dirList`、`glob`、`fileStat`                                                                                                                                                                                                     |
-| Auth           | `startDeviceFlow`、`getDeviceFlow`、`cancelDeviceFlow`、`getAuthStatus`                                                                                                                                                                                                                                                     |
+| 组             | 方法                                                                                                                                                                                                                                                                                                                                                     |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plumbing       | `health()`、`capabilities()`、`auth`（lazy `DaemonAuthFlow` accessor）                                                                                                                                                                                                                                                                                   |
+| Sessions       | `createOrAttachSession`、`loadSession`、`resumeSession`、`listWorkspaceSessions`、`closeSession`、`updateSessionMetadata`、`sessionContext`、`sessionContextUsage`、`sessionSupportedCommands`、`sessionTasks`、`sessionStats`、`setSessionApprovalMode`、`setSessionModel`、`deleteSessionsData`、`getRewindSnapshots`、`rewindSession`、`sessionHooks` |
+| Prompting      | `prompt`、`promptNonBlocking`、`cancel`、`heartbeat`、`recapSession`、`btwSession`、`shellCommand`                                                                                                                                                                                                                                                       |
+| Events         | `subscribeEvents`（SSE `AsyncIterable<DaemonEvent>` 生成器）                                                                                                                                                                                                                                                                                             |
+| Permissions    | `respondToPermission`、`respondToSessionPermission`                                                                                                                                                                                                                                                                                                      |
+| Workspace 快照 | `workspaceMcp`、`workspaceSkills`、`workspaceProviders`、`workspaceEnv`、`workspacePreflight`、`workspaceTools`、`workspaceMcpTools`、`workspaceHooks`、`workspaceExtensions`                                                                                                                                                                            |
+| Workspace 修改 | `writeWorkspaceMemory`、`workspaceMemory`、`listWorkspaceAgents`、`getWorkspaceAgent`、`createWorkspaceAgent`、`updateWorkspaceAgent`、`deleteWorkspaceAgent`、`generateWorkspaceAgent`、`setWorkspaceToolEnabled`、`restartMcpServer`、`initWorkspace`、`addRuntimeMcpServer`、`removeRuntimeMcpServer`、`manageMcpServer`                              |
+| Files          | `readWorkspaceFile`、`readWorkspaceFileBytes`、`writeWorkspaceFile`、`editWorkspaceFile`、`dirList`、`glob`、`fileStat`                                                                                                                                                                                                                                  |
+| Auth           | `startDeviceFlow`、`getDeviceFlow`、`cancelDeviceFlow`、`getAuthStatus`                                                                                                                                                                                                                                                                                  |
 
 ### `fetchWithTimeout`（BRN1o 行为）
 
@@ -66,7 +66,7 @@ new DaemonClient({
 - **`AbortController` + 可取消 `setTimeout`** 而不是 `AbortSignal.timeout()`；快速完成的请求不会在 event loop 上留 pending 定时器。`finally` 里 `clearTimeout`。
 - **流式端点（`subscribeEvents`）绕过超时** —— 长 SSE 不能被它杀。
 
-### `DaemonSessionClient`（`DaemonSessionClient.ts:61-385`）
+### `DaemonSessionClient`（`DaemonSessionClient.ts`）
 
 绑一个 session 并自动跟踪 `lastSeenEventId`，SSE 重连重放开箱即用。
 
@@ -85,10 +85,21 @@ class DaemonSessionClient {
   prompt(req: PromptRequest): Promise<PromptResult>;
   cancel(): Promise<void>;
   respondToPermission(...): Promise<PermissionResponse>;
+  respondToSessionPermission(...): Promise<PermissionResponse>;
   setModel(modelServiceId): Promise<SetModelResult>;
   heartbeat(): Promise<HeartbeatResult>;
   updateMetadata(metadata): Promise<SessionMetadataResult>;
   close(): Promise<void>;
+  context(): Promise<SessionContext>;
+  contextUsage(opts?): Promise<ContextUsage>;
+  supportedCommands(): Promise<SupportedCommands>;
+  tasks(): Promise<TasksSnapshot>;
+  stats(): Promise<SessionStats>;
+  recap(opts?): Promise<RecapResult>;
+  btw(question, opts?): Promise<BtwResult>;
+  shellCommand(command, signal?): Promise<ShellResult>;
+  getRewindSnapshots(): Promise<RewindSnapshots>;
+  rewind(promptId): Promise<RewindResult>;
 }
 ```
 
@@ -103,9 +114,12 @@ class DaemonAuthFlow {
 interface DaemonAuthFlowHandle {
   deviceFlowId: string;
   providerId: string;
-  expiresAt: string;
-  verificationUrl: string;
+  expiresAt: number;
+  verificationUri: string;
+  verificationUriComplete?: string;
   userCode: string;
+  intervalMs: number;
+  attached: boolean;
   awaitCompletion(opts?): Promise<DaemonAuthDeviceFlowState>;
   cancel(): Promise<void>;
 }
@@ -124,7 +138,7 @@ interface DaemonAuthFlowHandle {
 
 ### 类型（`types.ts`）
 
-主要导出：`DaemonCapabilities`、`DaemonSession`（`{ sessionId, workspaceCwd, attached, clientId?, createdAt? }`）、`DaemonEvent`、`DaemonSessionState`、`DaemonSessionContextStatus`、`DaemonSessionSupportedCommandsStatus`、`PermissionResponse`、`PromptResult`、`HeartbeatResult`、`SetModelResult`、`SessionMetadataResult`，以及 MCP / agent / memory / auth 结果类型。
+主要导出：`DaemonCapabilities`、`DaemonSession`（`{ sessionId, workspaceCwd, attached, clientId?, createdAt? }`）、`DaemonEvent`、`DaemonSessionState`、`DaemonSessionContextStatus`、`DaemonSessionSupportedCommandsStatus`、`DaemonWorkspaceHooksStatus`、`DaemonSessionHooksStatus`、`DaemonRewindSnapshotInfo`、`DaemonRewindResult`、`PermissionResponse`、`PromptResult`、`HeartbeatResult`、`SetModelResult`、`SessionMetadataResult`，以及 MCP / agent / memory / auth 结果类型。
 
 ## 流程
 
@@ -189,7 +203,7 @@ sequenceDiagram
     App->>AF: start({providerId: 'qwen-oauth'})
     AF->>DC: client.startDeviceFlow(...)
     DC->>D: POST /workspace/auth/device-flow
-    D-->>DC: {deviceFlowId, verificationUrl, userCode, intervalMs, expiresAt}
+    D-->>DC: {deviceFlowId, verificationUri, userCode, intervalMs, expiresAt}
     DC-->>AF: handle
     AF-->>App: handle (with awaitCompletion())
     App->>AF: handle.awaitCompletion()
@@ -200,6 +214,12 @@ sequenceDiagram
     end
     AF-->>App: final state
 ```
+
+### Hooks 诊断与 Rewind helper
+
+`DaemonClient.workspaceHooks()` 和 `DaemonClient.sessionHooks(sessionId)` 是只读诊断 helper，分别包 `GET /workspace/hooks` 与 `GET /session/:id/hooks`。调用前可 pre-flight `workspace_hooks` / `session_hooks`，老 daemon 返回 404。
+
+`DaemonClient.getRewindSnapshots(sessionId)` 包 `GET /session/:id/rewind/snapshots`；`DaemonClient.rewindSession(sessionId, promptId, {clientId})` 包 strict mutation 路由 `POST /session/:id/rewind`。`DaemonSessionClient` 提供会话绑定的 `getRewindSnapshots()` 与 `rewind(promptId)`，后者会自动带构造时的 `clientId`，让 `session_rewound` 事件带 `originatorClientId` 供 UI 去重。
 
 ## 状态与生命周期
 
@@ -218,7 +238,7 @@ sequenceDiagram
 
 SDK 还导出 `packages/sdk-typescript/src/daemon/ui/`，一套面向任何 UI 宿主的「daemon 事件 → transcript blocks」原语：
 
-- `normalizeDaemonEvent(evt)` 把 wire 上 38 种 typed event 映射成 34 种 UI 友好的 `DaemonUiEventType`。
+- `normalizeDaemonEvent(evt)` 把 wire 上 39 种 typed event 映射成 34 种 UI 友好的 `DaemonUiEventType`。
 - `createDaemonTranscriptState()` + `reduceDaemonTranscriptEvents(state, events)` 把 UI 事件流投到 `DaemonTranscriptBlock[]`。
 - `createDaemonTranscriptStore()` 提供 subscribe / dispatch 包装。
 - `render.ts` / `terminal.ts` 给 HTML 与终端基线渲染；`toolPreview.ts` 给 tool call 摘要。
@@ -254,8 +274,8 @@ SDK 还导出 `packages/sdk-typescript/src/daemon/ui/`，一套面向任何 UI �
 
 ## 参考
 
-- `packages/sdk-typescript/src/daemon/DaemonClient.ts:209-1506`
-- `packages/sdk-typescript/src/daemon/DaemonSessionClient.ts:61-385`
+- `packages/sdk-typescript/src/daemon/DaemonClient.ts`
+- `packages/sdk-typescript/src/daemon/DaemonSessionClient.ts`
 - `packages/sdk-typescript/src/daemon/DaemonAuthFlow.ts:102-340`
 - `packages/sdk-typescript/src/daemon/sse.ts:70-295`
 - `packages/sdk-typescript/src/daemon/events.ts:1-2101`

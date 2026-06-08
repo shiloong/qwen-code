@@ -1,4 +1,5 @@
 # Workspace MCP Transport 池
+
 ## 概览
 
 `McpTransportPool`（`packages/core/src/tools/mcp-transport-pool.ts:104+`）是 F2（#4175 commit 5）的工作区级共享池：一个 daemon 上的 N 个 ACP session 共享每个唯一 `(serverName + configFingerprint)` 元组对应的一条 transport，不再各 spawn 一份 MCP 子进程。池**在 ACP 子进程里**（`QwenAgent.mcpPool`），用 daemon bootstrap `Config` 构造一次，活过 session 生命周期 —— 条目按 session attach 引用计数，refs 归零后在可配宽限期 drain 回 closed。
@@ -94,7 +95,7 @@ interface PoolEntryOptions {
 }
 ```
 
-`defaultPoolEntryOptions(transport)`（`mcp-pool-entry.ts:58-70`）：stdio/ws → `{fixed 5s, 3 次}`；http/sse → `{exponential 1s → 16s, 5 次}`。remote transport 给更长重试预算，因为它们的失败更多是 transient。
+`defaultPoolEntryOptions(transport)`（`mcp-pool-entry.ts:58-70`）：stdio → `{fixed 5s, 3 次}`；websocket/http/sse → `{exponential 1s → 16s, 5 次}`。代码按 `isRemote = transport === 'http' || transport === 'sse' || transport === 'websocket'` 分类，websocket 归入 remote 组。remote transport 给更长重试预算，因为它们的失败更多是 transient。
 
 ## 流程
 
@@ -266,8 +267,8 @@ W77 竞态（`cb206da36`）：`createUnpooledConnection` 在 await `client.conne
 
 | 字段             | 类型                                        | 用途                                                                                                                                                                                                                                                                                                       |
 | ---------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `disabledReason` | `'config' \| 'budget'`                      | 区分 operator 禁用（`disabled: true` 来自 `disabledMcpServers` 配置）和预算拒绝（`status: 'error', errorKind: 'budget_exhausted'`）。operator 在 dashboard 上不必交叉查 `errors[]` 或 `budgets[]` 才能渲染单 server 行                                                                                      |
-| `entryCount`     | `number`（≥1）                              | 池模式工作区上同名可有多条 `PoolEntry`（session 注入不同 fingerprint，如 per-session OAuth header）。`QWEN_SERVE_NO_MCP_POOL=1` 关闭池时该字段不存在。新客户端按 `entryCount > 1` 渲「N 条 entry」徽章                                                                                                      |
+| `disabledReason` | `'config' \| 'budget'`                      | 区分 operator 禁用（`disabled: true` 来自 `disabledMcpServers` 配置）和预算拒绝（`status: 'error', errorKind: 'budget_exhausted'`）。operator 在 dashboard 上不必交叉查 `errors[]` 或 `budgets[]` 才能渲染单 server 行                                                                                     |
+| `entryCount`     | `number`（≥1）                              | 池模式工作区上同名可有多条 `PoolEntry`（session 注入不同 fingerprint，如 per-session OAuth header）。`QWEN_SERVE_NO_MCP_POOL=1` 关闭池时该字段不存在。新客户端按 `entryCount > 1` 渲「N 条 entry」徽章                                                                                                     |
 | `entrySummary`   | `ReadonlyArray<{entryIndex, refs, status}>` | per-entry 分解。`entryIndex` 是 entry 创建时分配的**稳定不透明整数** —— **不是**原始 fingerprint，否则会通过快照 diff 泄漏 OAuth/env 轮换时机。`refs` 是当前 attach 的 session 数。`status` 是 per-entry 运行时状态，dashboard 在聚合 `mcpStatus` 已经 `connected` 但某条 entry 还在重连时仍能显示分项健康 |
 
 `(entryCount, entrySummary)` **广播时永远成对**出现 —— `mcp_workspace_pool` 能力 tag 蕴含两者。老 SDK 客户端按加法协议契约忽略它们。
@@ -290,7 +291,7 @@ W77 竞态（`cb206da36`）：`createUnpooledConnection` 在 await `client.conne
 
 池 key 由 `fingerprint(cfg)`（`mcp-pool-key.ts:128+`）计算。哈希字段覆盖所有 transport 定义性的：
 
-> `transport, command, args, cwd, env, url, httpUrl, tcp, headers, timeout, oauth`
+> `transport, command, args, cwd, env, url, httpUrl, tcp, headers, timeout, oauth, authProviderType, targetAudience, targetServiceAccount`
 
 per-session 过滤 / 元数据字段（`includeTools`、`excludeTools`、`trust`、`description`、`extensionName`、`discoveryTimeoutMs`）**被排除**，不同 session 用不同过滤共享同一 entry。
 
@@ -316,8 +317,8 @@ operator 想要更快的孤儿清理可以重启 daemon 或对已不再配置的
 
 ```ts
 interface SweepResult {
-  pidSweepError?: Error;        // listDescendantPids 自身抛了
-  descendantsFound?: number;    // 找到的子孙 pid 数
+  pidSweepError?: Error; // listDescendantPids 自身抛了
+  descendantsFound?: number; // 找到的子孙 pid 数
   descendantsSignaled?: number; // 成功 SIGTERM 的数（可能 < found）
 }
 ```

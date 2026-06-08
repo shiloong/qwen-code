@@ -55,7 +55,9 @@ bridge / mediator 抛的 typed class，多数路由 handler 通过 switch 给出
 | `InvalidPermissionOptionError`        | 400  | wire 投票通过 `optionId` 注入 `CANCEL_VOTE_SENTINEL`                        | 改用 `{outcome: 'cancelled'}` 投票而不是 `optionId`                                                                                                                 |
 | `PermissionForbiddenError`            | 403  | 策略拒了投票者（`designated_mismatch` / `remote_not_allowed`）              | designated → 用 originator clientId；consensus → 预先注册 voter；local-only → 从 loopback 投票（详见 [`04-permission-mediation.md`](./04-permission-mediation.md)） |
 | `CancelSentinelCollisionError`        | 500  | agent 发布 `'__cancelled__'` 作为合法 option 标签                           | agent bug —— 改 option 标签                                                                                                                                         |
-| `PermissionPolicyNotImplementedError` | 500  | 请求的策略未在本 daemon 构建                                                | 升级 daemon 或改 `policy.permissionStrategy`                                                                                                                        |
+| `PermissionPolicyNotImplementedError` | 501  | 请求的策略未在本 daemon 构建                                                | 升级 daemon 或改 `policy.permissionStrategy`                                                                                                                        |
+| `SessionBusyError`                    | 409  | session 上已有 prompt 在跑                                                  | 等当前 prompt 完成后重试                                                                                                                                            |
+| `InvalidRewindTargetError`            | 400  | rewind 目标 turn 已被压缩或不存在                                           | 选择有效的 turn index                                                                                                                                               |
 | `BridgeChannelClosedError`            | 503  | ACP child channel 在调用中关闭（定义在 `status.ts` 而非 `bridgeErrors.ts`） | 重连 / 重试；查 `session_died` 找原因                                                                                                                               |
 | `BridgeTimeoutError`                  | 504  | bridge 级 wallclock 超（定义在 `status.ts` 而非 `bridgeErrors.ts`）         | 重试；排查底层慢                                                                                                                                                    |
 | `MissingCliEntryError`                | 500  | 找不到 `qwen` CLI 入口文件（定义在 `status.ts` 而非 `bridgeErrors.ts`）     | 确认 CLI 安装完整；检查 `packages/cli/index.ts` 是否存在                                                                                                            |
@@ -156,6 +158,7 @@ flowchart TD
 
 - `packages/cli/src/serve/fs/errors.ts:1-80+`（`FsErrorKind`、`FsErrorStatus`）
 - `packages/acp-bridge/src/bridgeErrors.ts`（所有 typed class）
-- `packages/cli/src/serve/status.ts`（`DaemonErrorKind`）
+- `packages/acp-bridge/src/status.ts`（`ServeErrorKind`）
+- `packages/sdk-typescript/src/daemon/types.ts`（`DaemonErrorKind`）
 - `packages/cli/src/serve/auth.ts:101-294`（auth body）
 - wire 参考：[`../qwen-serve-protocol.md`](../qwen-serve-protocol.md)。

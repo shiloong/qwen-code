@@ -293,6 +293,9 @@ describe('Session', () => {
       getSessionTokenLimit: vi.fn().mockReturnValue(0),
       getStopHookBlockingCap: vi.fn().mockReturnValue(8),
       getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
+      getFileHistoryService: vi.fn().mockReturnValue({
+        getSnapshots: vi.fn().mockReturnValue([]),
+      }),
     } as unknown as Config;
 
     mockClient = {

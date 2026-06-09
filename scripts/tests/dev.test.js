@@ -57,7 +57,7 @@ describe('scripts/dev.js launcher', () => {
   it('spawns Node without a shell on Windows when local tsx cli.mjs exists', async () => {
     platformMock.mockReturnValue('win32');
     existsSyncMock.mockImplementation((filePath) =>
-      String(filePath).endsWith('node_modules/tsx/dist/cli.mjs'),
+      /node_modules[\\/]tsx[\\/]dist[\\/]cli\.mjs$/.test(String(filePath)),
     );
     Object.defineProperty(process, 'execPath', {
       configurable: true,
@@ -70,8 +70,8 @@ describe('scripts/dev.js launcher', () => {
     expect(spawnMock).toHaveBeenCalledWith(
       'C:\\Program Files\\nodejs\\node.exe',
       [
-        expect.stringContaining('node_modules/tsx/dist/cli.mjs'),
-        expect.stringContaining('packages/cli/index.ts'),
+        expect.stringMatching(/node_modules[\\/]tsx[\\/]dist[\\/]cli\.mjs$/),
+        expect.stringMatching(/packages[\\/]cli[\\/]index\.ts$/),
         '--help',
       ],
       expect.objectContaining({ shell: false }),
@@ -81,14 +81,14 @@ describe('scripts/dev.js launcher', () => {
   it('keeps shell fallback for Windows tsx.cmd resolution', async () => {
     platformMock.mockReturnValue('win32');
     existsSyncMock.mockImplementation((filePath) =>
-      String(filePath).endsWith('node_modules/.bin/tsx.cmd'),
+      /node_modules[\\/]\.bin[\\/]tsx\.cmd$/.test(String(filePath)),
     );
 
     await import('../dev.js?cmd-fallback');
 
     expect(spawnMock).toHaveBeenCalledWith(
       expect.stringContaining('tsx.cmd'),
-      [expect.stringContaining('packages/cli/index.ts')],
+      [expect.stringMatching(/packages[\\/]cli[\\/]index\.ts$/)],
       expect.objectContaining({ shell: true }),
     );
   });

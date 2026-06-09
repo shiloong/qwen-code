@@ -439,6 +439,10 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
           this.cliConfig,
           `mcp__${this.serverName}__${this.serverToolName}`,
           part.text,
+          // Per-tool char budget; mirrors DiscoveredMCPTool.maxOutputChars
+          // (10x the global default, since MCP servers return large structured
+          // output). The global line cap still applies as a secondary bound.
+          { threshold: 500_000 },
         );
         result.push({ text: truncated.content });
       } else {
@@ -457,6 +461,13 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
   ToolParams,
   ToolResult
 > {
+  // MCP servers often return large structured payloads; allow 10x the global
+  // budget (mirrors Claude Code's MCP `maxResultSizeChars`) before the
+  // scheduler offloads. truncateTextParts uses the same ceiling per text part.
+  override get maxOutputChars(): number {
+    return 500_000;
+  }
+
   constructor(
     private readonly mcpTool: CallableTool,
     readonly serverName: string,

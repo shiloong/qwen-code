@@ -201,23 +201,64 @@ describe('DualOutputBridge', () => {
     });
   });
 
-  describe('FIFO (named pipe) support', () => {
+  describe('buffer overflow guard', () => {
+    it('disables itself when buffered data exceeds 1 MB', () => {
+      bridge = new DualOutputBridge(config, { filePath: target });
+      expect(bridge.isConnected).toBe(true);
+
+      // Simulate a bloated buffer by overriding writableLength
+      Object.defineProperty(bridge['stream'], 'writableLength', {
+        value: 1024 * 1024 + 1,
+      });
+
+      // Any write method should trigger the guard
+      bridge.emitSystemMessage('test', {});
+      expect(bridge.isConnected).toBe(false);
+    });
+
+    it('destroys the stream on overflow so consumers receive EOF', () => {
+      bridge = new DualOutputBridge(config, { filePath: target });
+      const destroySpy = vi.spyOn(bridge['stream'], 'destroy');
+
+      Object.defineProperty(bridge['stream'], 'writableLength', {
+        value: 1024 * 1024 + 1,
+      });
+
+      bridge.emitSystemMessage('test', {});
+      expect(destroySpy).toHaveBeenCalled();
+    });
+
+    it('shutdown resolves immediately after buffer overflow destroys stream', async () => {
+      bridge = new DualOutputBridge(config, { filePath: target });
+
+      Object.defineProperty(bridge['stream'], 'writableLength', {
+        value: 1024 * 1024 + 1,
+      });
+      bridge.emitSystemMessage('test', {});
+      expect(bridge.isConnected).toBe(false);
+
+      await expect(bridge.shutdown()).resolves.toBeUndefined();
+    });
+  });
+
+  const hasMkfifo = (() => {
+    try {
+      execSync('which mkfifo', { stdio: 'ignore' });
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+
+  describe.skipIf(!hasMkfifo)('FIFO (named pipe) support', () => {
     let fifoPath: string;
 
     beforeEach(() => {
       fifoPath = path.join(tmpDir, 'events.fifo');
-      try {
-        execSync(`mkfifo "${fifoPath}"`);
-      } catch {
-        // mkfifo not available (Windows) — skip these tests
-      }
+      execSync(`mkfifo "${fifoPath}"`);
     });
 
     it('does not block when opened without a reader connected', () => {
-      if (!fs.existsSync(fifoPath) || !fs.statSync(fifoPath).isFIFO()) {
-        return; // skip on platforms without mkfifo
-      }
-
       const start = Date.now();
       bridge = new DualOutputBridge(config, { filePath: fifoPath });
       const elapsed = Date.now() - start;
@@ -227,10 +268,6 @@ describe('DualOutputBridge', () => {
     });
 
     it('delivers events to a reader that connects after construction', async () => {
-      if (!fs.existsSync(fifoPath) || !fs.statSync(fifoPath).isFIFO()) {
-        return; // skip on platforms without mkfifo
-      }
-
       bridge = new DualOutputBridge(config, { filePath: fifoPath });
       bridge.emitSystemMessage('test_event', { key: 'value' });
 

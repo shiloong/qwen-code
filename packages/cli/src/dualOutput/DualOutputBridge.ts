@@ -181,8 +181,7 @@ export class DualOutputBridge {
   }
 
   processEvent(event: ServerGeminiStreamEvent): void {
-    if (!this.active) return;
-    if (this.isBufferOverflowing()) return;
+    if (!this.guardActive()) return;
     try {
       this.adapter.processEvent(event);
     } catch (err) {
@@ -192,7 +191,7 @@ export class DualOutputBridge {
   }
 
   startAssistantMessage(): void {
-    if (!this.active) return;
+    if (!this.guardActive()) return;
     try {
       this.adapter.startAssistantMessage();
     } catch (err) {
@@ -202,7 +201,7 @@ export class DualOutputBridge {
   }
 
   finalizeAssistantMessage(): void {
-    if (!this.active) return;
+    if (!this.guardActive()) return;
     try {
       this.adapter.finalizeAssistantMessage();
     } catch (err) {
@@ -212,7 +211,7 @@ export class DualOutputBridge {
   }
 
   emitUserMessage(parts: Part[]): void {
-    if (!this.active) return;
+    if (!this.guardActive()) return;
     try {
       this.adapter.emitUserMessage(parts);
     } catch (err) {
@@ -225,7 +224,7 @@ export class DualOutputBridge {
     request: ToolCallRequestInfo,
     response: ToolCallResponseInfo,
   ): void {
-    if (!this.active) return;
+    if (!this.guardActive()) return;
     try {
       this.adapter.emitToolResult(request, response);
     } catch (err) {
@@ -239,15 +238,17 @@ export class DualOutputBridge {
     return this.active;
   }
 
-  private isBufferOverflowing(): boolean {
+  private guardActive(): boolean {
+    if (!this.active) return false;
     if (this.stream.writableLength > MAX_BUFFERED_BYTES) {
       debugLogger.warn(
         'DualOutput: buffered data exceeds limit, disabling (no consumer draining?)',
       );
       this.active = false;
-      return true;
+      this.stream.destroy();
+      return false;
     }
-    return false;
+    return true;
   }
 
   /**
@@ -261,7 +262,7 @@ export class DualOutputBridge {
     input: unknown,
     blockedPath: string | null = null,
   ): void {
-    if (!this.active) return;
+    if (!this.guardActive()) return;
     try {
       this.adapter.emitPermissionRequest(
         requestId,
@@ -281,7 +282,7 @@ export class DualOutputBridge {
    * the external consumer) so all observers stay in sync.
    */
   emitControlResponse(requestId: string, allowed: boolean): void {
-    if (!this.active) return;
+    if (!this.guardActive()) return;
     try {
       this.adapter.emitControlResponse(requestId, allowed);
     } catch (err) {
@@ -297,7 +298,7 @@ export class DualOutputBridge {
    * consumers retry or surface the error instead of silently hanging.
    */
   emitControlError(requestId: string, message: string): void {
-    if (!this.active) return;
+    if (!this.guardActive()) return;
     try {
       this.adapter.emitControlError(requestId, message);
     } catch (err) {
@@ -308,7 +309,7 @@ export class DualOutputBridge {
 
   /** General-purpose system event escape hatch. */
   emitSystemMessage(subtype: string, data?: unknown): void {
-    if (!this.active) return;
+    if (!this.guardActive()) return;
     try {
       this.adapter.emitSystemMessage(subtype, data);
     } catch (err) {
@@ -334,7 +335,7 @@ export class DualOutputBridge {
     }
     this.active = false;
     this.shutdownPromise = new Promise((resolve) => {
-      if (this.stream.closed) {
+      if (this.stream.closed || this.stream.destroyed) {
         resolve();
         return;
       }

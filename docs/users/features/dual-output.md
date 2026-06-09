@@ -223,7 +223,7 @@ echo '{"type":"submit","text":"Explain this repo"}' >> /tmp/qwen-input.jsonl
 The prompt appears in the TUI exactly as if the user typed it, and the
 streaming response is mirrored on `/tmp/qwen-events.jsonl`.
 
-### Using FIFOs (named pipes)
+### Using FIFOs (named pipes) for event output
 
 FIFOs deliver lower latency than regular files (no disk I/O) and work
 well when both sides are on the same host. The bridge opens FIFOs with
@@ -231,8 +231,13 @@ well when both sides are on the same host. The bridge opens FIFOs with
 connected yet — events are buffered in the kernel pipe buffer until a
 reader attaches.
 
+> **Note:** `--input-file` requires a regular file (not a FIFO) because
+> the watcher relies on `stat.size` to detect new data, which is always
+> 0 for FIFOs.
+
 ```bash
-mkfifo /tmp/qwen-events.jsonl /tmp/qwen-input.jsonl
+mkfifo /tmp/qwen-events.jsonl
+touch /tmp/qwen-input.jsonl
 qwen \
   --json-file /tmp/qwen-events.jsonl \
   --input-file /tmp/qwen-input.jsonl
